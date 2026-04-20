@@ -13,3 +13,4 @@ websockets
 alpaca-trade-api
 scikit-learn
 joblib
+pandas_ta
