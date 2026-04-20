@@ -1,0 +1,170 @@
+//@version=5
+strategy("SK System (ABC Pattern) + Filters", overlay=true, initial_capital=1000, max_bars_back=500)
+
+// --- Settings ---
+// ZigZag Settings
+length = input.int(5, "ZigZag Depth")
+// Fibonacci Ratios
+fibB_Min = input.float(0.50, "Zone B Min (Retracement)")
+fibB_Max = input.float(0.667, "Zone B Max (Retracement)")
+fibC_Min = input.float(1.272, "Zone C Min (Extension)")
+fibC_Max = input.float(1.618, "Zone C Max (Extension)")
+
+// Filters
+useEmaFilter = input.bool(true, "Filter: Price > EMA 200")
+useRsiFilter = input.bool(true, "Filter: RSI > 50")
+useVolFilter = input.bool(true, "Filter: Volume > Avg Vol")
+
+// Colors
+colorZoneB = input.color(color.new(color.green, 80), "Zone B Color")
+colorZoneC = input.color(color.new(color.blue, 80), "Zone C Color")
+colorLineA = input.color(color.black, "Line A Color")
+
+// --- Indicators ---
+ema200 = ta.ema(close, 200)
+rsi = ta.rsi(close, 14)
+volAvg = ta.sma(volume, 20)
+
+// --- ZigZag Logic ---
+// We need to store potential ABC points specifically
+// A generic zigzag finds all pivots, we need to filter for the specific Geometry
+var float pZ = na
+var float pA = na
+var float pB = na
+var int idxZ = na
+var int idxA = na
+var int idxB = na
+
+// Current Pivots
+ph = ta.pivothigh(length, length)
+pl = ta.pivotlow(length, length)
+
+// Update Points logic (State Machine for Pattern Finding)
+// 0: Searching for Z (Low)
+// 1: Searching for A (High)
+// 2: Searching for B (Higher Low)
+// 3: Ready for Breakout
+var int state = 0 
+
+// Detect Low (Potential Z or B)
+if not na(pl)
+    if state == 0
+        // Found initial Low (Z)
+        pZ := pl
+        idxZ := bar_index - length
+        state := 1 // Look for A
+    else if state == 1
+        // Found a Low while looking for A? 
+        // If this Low is lower than Z, reset Z to this new Low
+        if pl < pZ
+            pZ := pl
+            idxZ := bar_index - length
+        // Else just ignore or minor pullback
+    else if state == 2
+        // Found Low (B)
+        // Must be higher than Z (Higher High structure basic)
+        if pl > pZ
+            // Check Fibs
+            float wave_za = pA - pZ
+            float retracement = (pA - pl) / wave_za
+            
+            if retracement >= fibB_Min and retracement <= fibB_Max
+                pB := pl
+                idxB := bar_index - length
+                state := 3 // Pattern Complete, waiting for Breakout
+                
+                // Draw Visuals on Confirmation of B
+                alert("New Valid SK Pattern Setup", alert.freq_once_per_bar)
+            else
+                // Invalid B depth
+                if pl < pZ
+                    // Broken structure, reset
+                    pZ := pl
+                    idxZ := bar_index - length
+                    state := 1
+        else
+            // Low < Z, Invalid pattern, reset to new Z
+            pZ := pl
+            idxZ := bar_index - length
+            state := 1
+
+// Detect High (Potential A)
+if not na(ph)
+    if state == 1
+        // Found High (A)
+        pA := ph
+        idxA := bar_index - length
+        state := 2 // Look for B
+    else if state == 3
+        // Found a new High before breakout?
+        // If this high is lower than A, it might be internal structure.
+        // If higher than A, we missed entry or A moves up?
+        // Simple simplified logic: Keep A until broken or invalid.
+        na
+
+// --- Visuals (Drawing) ---
+var box boxB_draw = na
+var box boxC_draw = na
+var line lineA_draw = na
+
+// Clean up old drawings if we reset
+if ta.change(state) and state == 3
+    // We just confirmed B. Draw everything.
+    box.delete(boxB_draw)
+    box.delete(boxC_draw)
+    line.delete(lineA_draw)
+    
+    float wave_za = pA - pZ
+    float zoneB_Top = pA - (wave_za * fibB_Min)
+    float zoneB_Bot = pA - (wave_za * fibB_Max)
+    float zoneC_Top = pB + (wave_za * fibC_Max) // Target based on expansion
+    float zoneC_Bot = pB + (wave_za * fibC_Min)
+    
+    // Draw
+    boxB_draw := box.new(idxA, zoneB_Top, bar_index + 50, zoneB_Bot, border_color=colorZoneB, bgcolor=colorZoneB, text="Zone B (Buy)")
+    boxC_draw := box.new(idxB, zoneC_Top, bar_index + 100, zoneC_Bot, border_color=colorZoneC, bgcolor=colorZoneC, text="Zone C (Target)")
+    lineA_draw := line.new(idxA, pA, bar_index + 50, pA, color=colorLineA, style=line.style_dashed, width=2)
+
+
+// --- Invalidation Logic ---
+// If we are in State 3 (Waiting for Breakout), but price drops below Z (or B, depending on strictness)
+bool patternInvalid = false
+if state == 3 and close < pB
+    // Pattern Failed (Lower Low created)
+    patternInvalid := true
+    state := 0 // Reset
+    label.new(bar_index, low, "❌ Pattern Invalid\n(Low Broken)", style=label.style_label_up, color=color.gray, textcolor=color.white)
+    box.delete(boxB_draw)
+    box.delete(boxC_draw)
+    line.delete(lineA_draw)
+
+// --- Entry Logic ---
+// Trigger: Price Crosses A
+bool breakout = state == 3 and close > pA and close[1] <= pA
+
+// Check Filters
+bool emaOk = not useEmaFilter or (close > ema200)
+bool rsiOk = not useRsiFilter or (rsi > 50)
+bool volOk = not useVolFilter or (volume > volAvg)
+
+if breakout and emaOk and rsiOk and volOk and strategy.position_size == 0
+    float sl = pB
+    float tp = (pB + (pA - pZ) * 1.618) // Target Zone C Max
+    
+    strategy.entry("SK_Long", strategy.long)
+    strategy.exit("Exit SK", "SK_Long", stop=sl, limit=tp)
+    
+    label.new(bar_index, high, "🚀 SK ENTRY\nTarget: Zone C", color=color.green, style=label.style_label_down, textcolor=color.white)
+    
+    // Reset state after entry to look for new patterns later? 
+    // Usually wait for trade to finish, but logic keeps running.
+    state := 0 
+
+// --- Failure Marker (Strategy Level) ---
+// If trade hits SL
+if strategy.position_size == 0 and strategy.position_size[1] > 0
+    if strategy.closedtrades.profit(strategy.closedtrades - 1) < 0
+        label.new(bar_index, high, "FAILED ❌", color=color.red, style=label.style_label_down, textcolor=color.white)
+
+// Plot Indicators
+plot(useEmaFilter ? ema200 : na, "EMA 200", color=color.orange)

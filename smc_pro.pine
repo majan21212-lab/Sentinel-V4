@@ -1,0 +1,106 @@
+//@version=6
+strategy("Professional SMC Strategy (Clean)", overlay=true, initial_capital=1000, max_bars_back=500)
+
+// --- Settings ---
+// Structure
+swingLength = input.int(5, "Swing Points Length")
+// Filters
+
+useSessionFilter = input.bool(true, "Filter: Kill Zones Only?")
+sessionLondon = input.session("0800-1100", "London")
+sessionNY = input.session("1300-1600", "New York")
+
+// Colors
+colorBull = input.color(color.new(color.blue, 90), "Demand Zone")
+colorBear = input.color(color.new(color.red, 90), "Supply Zone")
+colorText = color.black
+
+// --- Global Vars ---
+atrValue = ta.atr(14)
+var box lastOB = box.new(na, na, na, na) // Only track the latest OB for visuals
+var label lastLabel = label.new(na, na)    // Track last label to delete it
+
+// Check Time
+inSession(sess) => not na(time(timeframe.period, sess))
+
+// --- Market Structure ---
+var int trend = 0 
+ph = ta.pivothigh(swingLength, swingLength)
+pl = ta.pivotlow(swingLength, swingLength)
+
+if not na(ph) and close > ph
+    trend := 1 // Bullish Break
+if not na(pl) and close < pl
+    trend := -1 // Bearish Break
+
+// --- Order Blocks (Visuals) ---
+var float obEntry = na
+var float obSL = na
+var bool obActive = false
+
+// Detect OB logic (Simplified for Visuals)
+if not na(pl) and trend == 1
+    // New Demand Zone
+    float top = high[swingLength]
+    float bot = low[swingLength]
+    
+    // cleanup old box to prevent clutter?
+    // strategy usually tests all, but for visual clarity let's delete the VERY old ones 
+    // or just let them stay but keep text small. 
+    // To strictly follow "Clean", let's delete the previous box if it wasn't triggered?
+    // No, historical boxes are good. Stick to small text.
+    
+    lastOB := box.new(bar_index[swingLength], top, bar_index + 10, bot, border_color=color.new(color.blue, 80), bgcolor=colorBull, text="Demand", text_color=colorText, text_size=size.tiny, text_halign=text.align_right)
+    obEntry := top
+    obSL := bot
+    obActive := true
+
+if not na(ph) and trend == -1
+    // New Supply Zone
+    float top = high[swingLength]
+    float bot = low[swingLength]
+    
+    lastOB := box.new(bar_index[swingLength], top, bar_index + 10, bot, border_color=color.new(color.red, 80), bgcolor=colorBear, text="Supply", text_color=colorText, text_size=size.tiny, text_halign=text.align_right)
+    obEntry := bot
+    obSL := top
+    obActive := true
+
+// Extend Box if active and not broken
+if obActive
+    if (trend == 1 and close < obSL) or (trend == -1 and close > obSL)
+        obActive := false // Broken
+        box.set_right(lastOB, bar_index)
+    else
+        box.set_right(lastOB, bar_index + 5)
+
+// --- Entry & Clean Labels ---
+bool timeOk = (not useSessionFilter) or (inSession(sessionLondon) or inSession(sessionNY))
+bool inZone = false
+
+if obActive and timeOk
+    if trend == 1 and low <= obEntry and high >= obSL 
+        inZone := true
+    if trend == -1 and high >= obEntry and low <= obSL
+        inZone := true
+
+if inZone and strategy.position_size == 0
+    // CLEANUP: Delete previous pending order label to avoid overlaps
+    label.delete(lastLabel)
+    
+    if trend == 1
+        strategy.entry("Buy", strategy.long, limit=obEntry, stop=obSL)
+        strategy.exit("Exit", "Buy", stop=obSL, limit=obEntry + (obEntry-obSL)*3)
+        // New Label
+        lastLabel := label.new(bar_index, low - atrValue, "BUY", color=color.green, style=label.style_label_up, textcolor=color.white, size=size.tiny)
+        
+    if trend == -1
+        strategy.entry("Sell", strategy.short, limit=obEntry, stop=obSL)
+        strategy.exit("Exit", "Sell", stop=obSL, limit=obEntry - (obSL-obEntry)*3)
+        // New Label
+        lastLabel := label.new(bar_index, high + atrValue, "SELL", color=color.red, style=label.style_label_down, textcolor=color.white, size=size.tiny)
+
+// --- Result Markers (Minimalist) ---
+if strategy.closedtrades > strategy.closedtrades[1]
+    bool win = strategy.closedtrades.profit(strategy.closedtrades - 1) > 0
+    // Only show a small dot or symbol
+    label.new(bar_index, high, win ? "●" : "x", color=win ? color.green : color.red, style=label.style_none, textcolor=win ? color.green : color.red, size=size.small)

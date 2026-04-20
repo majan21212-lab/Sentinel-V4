@@ -1,0 +1,92 @@
+//@version=6
+strategy("Exness Ichimoku Pro (Breakout Entry)", overlay=true, initial_capital=1000)
+
+// --- إعدادات إيشيموكو (Ichimoku Settings) ---
+tenkan = math.avg(ta.lowest(9), ta.highest(9))
+kijun  = math.avg(ta.lowest(26), ta.highest(26))
+senkouA = math.avg(tenkan, kijun)
+senkouB = math.avg(ta.lowest(52), ta.highest(52))
+
+// --- إعدادات الفلاتر لزيادة نسبة النجاح (Filters for Success) ---
+useEmaFilter   = input.bool(true, "Use 200 EMA Trend Filter", group="Filters")
+useFutureCloud = input.bool(true, "Check Future Cloud Color", group="Filters")
+useChikou      = input.bool(true, "Check Chikou Span (Lagging)", group="Filters")
+
+// 1. EMA 200 Trend Filter
+ema200 = ta.ema(close, 200)
+plot(useEmaFilter ? ema200 : na, color=color.orange, linewidth=2, title="200 EMA")
+
+// --- تعريف السحابة الحالية والمستقبلية ---
+// السحابة الحالية (نفس المنطق السابق، مزاحة 26)
+// ملاحظة: باين سكربت يرسم senkouA مزاحاً بشكل تلقائي إذا استخدمنا offset في plot، لكن للحسابات نحتاج القيمة الحالية.
+// القيمة الحالية لخطوط السحابة (للشمعة الحالية) هي القيم المحسوبة قبل 26 شمعة.
+currentSenkouA = senkouA[26]
+currentSenkouB = senkouB[26]
+
+cloudTop    = math.max(currentSenkouA, currentSenkouB)
+cloudBottom = math.min(currentSenkouA, currentSenkouB)
+
+// السحابة المستقبلية (بعد 26 شمعة) - تستخدم لتأكيد الاتجاه
+futureGreen = senkouA > senkouB
+futureRed   = senkouA < senkouB
+
+// الشيكو سبان (السعر مزاح للخلف 26) - نقارنه بالسعر قبل 26
+// في التداول الحي، لا يمكننا رؤية المستقبل، لكن الشيكو هو سعر الإغلاق الحالي مرسوم للخلف.
+// شرط الشيكو: للإغلاق الحالي، يجب أن يكون فوق سعر الإغلاق قبل 26 شمعة (لشراء)
+chikouLong  = close > close[26]
+chikouShort = close < close[26]
+
+// --- شروط الفلاتر ---
+filterLong  = (not useEmaFilter or close > ema200) and (not useFutureCloud or futureGreen) and (not useChikou or chikouLong)
+filterShort = (not useEmaFilter or close < ema200) and (not useFutureCloud or futureRed) and (not useChikou or chikouShort)
+
+// --- منطق الدخول (First Candle Breakout) ---
+// 1. شراء: السعر يغلق فوق السحابة لأول مرة (كان تحت أو داخل) + التنكان فوق الكيجون
+breakoutUp   = ta.crossover(close, cloudTop)
+// نأخذ الصفقة إذا حدث اختراق الآن، أو إذا حدث تقاطع تنكان الآن والسعر أصلاً فوق السحابة
+longSignal   = (breakoutUp and tenkan > kijun) or (ta.crossover(tenkan, kijun) and close > cloudTop)
+
+// 2. بيع: السعر يغلق تحت السحابة لأول مرة + التنكان تحت الكيجون
+breakoutDown = ta.crossunder(close, cloudBottom)
+shortSignal  = (breakoutDown and tenkan < kijun) or (ta.crossunder(tenkan, kijun) and close < cloudBottom)
+
+// مسافة الملصقات
+dist = ta.atr(14) * 2
+
+// تنفيذ صفقة Long
+if (longSignal and filterLong and strategy.position_size == 0)
+    float sl = kijun // وقف الخسارة على الكيجون
+    float tp = close + (close - sl) * 1.5
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Exit Long", "Long", stop=sl, limit=tp)
+    
+    label.new(bar_index, low - dist, 
+         text="🚀 BREAKOUT\nEntry: " + str.tostring(close, "#.#####"), 
+         color=color.blue, style=label.style_label_up, textcolor=color.white)
+
+// تنفيذ صفقة Short
+if (shortSignal and filterShort and strategy.position_size == 0)
+    float sl = kijun
+    float tp = close - (sl - close) * 1.5
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Exit Short", "Short", stop=sl, limit=tp)
+    
+    label.new(bar_index, high + dist, 
+         text="📉 BREAKOUT\nEntry: " + str.tostring(close, "#.#####"), 
+         color=color.orange, style=label.style_label_down, textcolor=color.white)
+
+// رسم السحابة
+// رسم السحابة
+p1 = plot(senkouA, offset=26, color=color.new(color.green, 80), title="Lead A")
+p2 = plot(senkouB, offset=26, color=color.new(color.red, 80), title="Lead B")
+fill(p1, p2, color=senkouA > senkouB ? color.new(color.green, 90) : color.new(color.red, 90))
+
+// --- مربع النتيجة ---
+if (strategy.closedtrades > strategy.closedtrades[1])
+    bool isWin = strategy.closedtrades.profit(strategy.closedtrades - 1) > 0
+    string tradeDir = strategy.closedtrades.size(strategy.closedtrades - 1) > 0 ? "LONG" : "SHORT"
+    string resultText = isWin ? "WIN ✅" : "LOSS ❌"
+    color boxColor = isWin ? color.green : color.red
+    
+    label.new(bar_index, high + (dist * 2), 
+         text=resultText, color=boxColor, textcolor=color.white, style=label.style_label_center)

@@ -1,0 +1,218 @@
+// This Pine Script™ source code is subject to the terms of the Mozilla Public License 2.0
+// © Ultimate Master Confluence MTF v7.0 — Institutional Asset Edition
+
+//@version=5
+indicator("Ultimate Master Confluence Institutional [v7.0]", overlay=true, max_boxes_count=100, max_lines_count=150, max_labels_count=200)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 1 — ASSET-DRIVEN DEFAULTS & GLOBAL INPUTS
+// ═══════════════════════════════════════════════════════════
+
+grp_asset = "🌍 Institutional Asset Optimization"
+i_assetMode = input.string("Auto Detect", "Asset Mode", options=["Auto Detect", "XAUUSD (Gold)", "US100 (Nasdaq)", "DE40 (DAX)", "Forex/Custom"], group=grp_asset)
+
+// --- Auto-Detection Logic ---
+isGold   = i_assetMode == "XAUUSD (Gold)" or (i_assetMode == "Auto Detect" and (str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")))
+isNasdaq = i_assetMode == "US100 (Nasdaq)" or (i_assetMode == "Auto Detect" and (str.contains(syminfo.ticker, "US100") or str.contains(syminfo.ticker, "NAS100") or str.contains(syminfo.ticker, "NDX")))
+isDax    = i_assetMode == "DE40 (DAX)" or (i_assetMode == "Auto Detect" and (str.contains(syminfo.ticker, "DE40") or str.contains(syminfo.ticker, "DAX") or str.contains(syminfo.ticker, "GER40")))
+
+// --- Session Kill Zones (GMT/UTC) ---
+grp_sessions = "🕒 Session Kill Zones (UTC)"
+i_useSessions = input.bool(true, "Enable Session Filters", group=grp_sessions)
+i_lonSession  = input.session("0700-1100", "London Kill Zone", group=grp_sessions)
+i_nySession   = input.session("1300-1700", "New York Kill Zone", group=grp_sessions)
+
+// --- Multi-Timeframe Trend ---
+grp_mtf   = "🌓 Institutional Bias (MTF)"
+i_htf1    = input.timeframe("240",  "Macro Trend (H4)",    group=grp_mtf)
+i_htf2    = input.timeframe("60",   "Intermediate (H1)",  group=grp_mtf)
+i_htfEma1 = input.int(200,  "Macro EMA 200 (HTF1)",       group=grp_mtf)
+i_htfEma2 = input.int(50,   "Int. EMA 50 (HTF2)",        group=grp_mtf)
+i_reqMTF  = input.bool(true, "Require Full Alignment",    group=grp_mtf)
+
+// --- Execution & Structure ---
+grp_struct = "🏗️ Market Structure & SMC"
+i_swing   = input.int(5,     "Swing Lookback (Bars)",     group=grp_struct, minval=3)
+i_atrM    = input.float(2.0, "ATR SL Multiplier",          group=grp_struct, step=0.1)
+i_tpM1    = input.float(1.5, "TP1 Reward Ratio",           group=grp_struct, step=0.1)
+i_tpM2    = input.float(3.0, "TP2 Reward Ratio",           group=grp_struct, step=0.1)
+i_reqFVG  = input.bool(true, "Require FVG Displacement",   group=grp_struct)
+i_reqLiq  = input.bool(true, "Require Liquidity Sweep",    group=grp_struct)
+
+// --- Visual & UI ---
+grp_ui    = "🎨 Institutional UI"
+i_showD   = input.bool(true, "Show Dashboard",             group=grp_ui)
+i_showFvg = input.bool(true, "Draw Active FVGs",           group=grp_ui)
+i_risk    = input.float(1.0, "Risk Per Trade (%)",         group=grp_ui, minval=0.1, maxval=5.0)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 2 — CORE INDICATORS & MTF ENGINE
+// ═══════════════════════════════════════════════════════════
+
+// --- Session Logic ---
+isLon = not na(time(timeframe.period, i_lonSession, "UTC"))
+isNY  = not na(time(timeframe.period, i_nySession, "UTC"))
+isKillZone = not i_useSessions or isLon or isNY
+
+// --- HTF1 (Macro Bias) ---
+htf1_ema_val  = request.security(syminfo.tickerid, i_htf1, ta.ema(close, i_htfEma1), lookahead=barmerge.lookahead_off)
+htf1_close    = request.security(syminfo.tickerid, i_htf1, close[1],                 lookahead=barmerge.lookahead_off)
+htf1_bull     = not na(htf1_close) and not na(htf1_ema_val) and htf1_close > htf1_ema_val
+htf1_bear     = not na(htf1_close) and not na(htf1_ema_val) and htf1_close < htf1_ema_val
+
+// --- HTF2 (Intermediate Bias) ---
+htf2_ema_val  = request.security(syminfo.tickerid, i_htf2, ta.ema(close, i_htfEma2), lookahead=barmerge.lookahead_off)
+htf2_close    = request.security(syminfo.tickerid, i_htf2, close[1],                 lookahead=barmerge.lookahead_off)
+htf2_bull     = not na(htf2_close) and not na(htf2_ema_val) and htf2_close > htf2_ema_val
+htf2_bear     = not na(htf2_close) and not na(htf2_ema_val) and htf2_close < htf2_ema_val
+
+// --- Combined Bias ---
+inst_bullish = htf1_bull and htf2_bull
+inst_bearish = htf1_bear and htf2_bear
+
+// --- Local TF Indicators ---
+atr      = ta.atr(14)
+ema200   = ta.ema(close, 200)
+baseline = ta.hma(close, 21)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 3 — SMC & LIQUIDITY ENGINE
+// ═══════════════════════════════════════════════════════════
+
+// --- Swing Points ---
+ph = ta.pivothigh(high, i_swing, i_swing)
+pl = ta.pivotlow(low,   i_swing, i_swing)
+
+var float lastSH = na
+var float lastSL = na
+var float prevSH = na // Used for MSS
+var float prevSL = na
+
+if not na(ph)
+    prevSH := lastSH
+    lastSH := ph
+if not na(pl)
+    prevSL := lastSL
+    lastSL := pl
+
+// --- Liquidity Sweep (SMC) ---
+// Condition: Price breaks a recent swing and closes back inside.
+bullSweep = not na(lastSL) and low < lastSL and close > lastSL
+bearSweep = not na(lastSH) and high > lastSH and close < lastSH
+
+var bool sweepPendingLong  = false
+var bool sweepPendingShort = false
+
+if bullSweep
+    sweepPendingLong := true
+if bearSweep
+    sweepPendingShort := true
+
+// --- Fair Value Gap (FVG) ---
+bullFVG = low > high[2] and close[1] > high[2]
+bearFVG = high < low[2] and close[1] < low[2]
+
+// --- Market Structure Shift (MSS) ---
+// Condition: After a sweep, a displacement candle closes past the most recent internal structure.
+var float triggerSH = na
+var float triggerSL = na
+
+if bullSweep
+    triggerSH := lastSH
+if bearSweep
+    triggerSL := lastSL
+
+is_mss_long  = sweepPendingLong  and ta.crossover(close, triggerSH)
+is_mss_short = sweepPendingShort and ta.crossunder(close, triggerSL)
+
+// Reset pending status after MSS or if price voids the range
+if is_mss_long or low < lastSL - (atr * 2)
+    sweepPendingLong := false
+if is_mss_short or high > lastSH + (atr * 2)
+    sweepPendingShort := false
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 4 — CONFLUENCE & SIGNALS
+// ═══════════════════════════════════════════════════════════
+
+// --- Premium/Discount Filter ---
+range_high = lastSH
+range_low  = lastSL
+midpoint   = (range_high + range_low) / 2
+isDiscount = close < midpoint
+isPremium  = close > midpoint
+
+// --- Final Decision Matrix ---
+longCond  = is_mss_long  and isKillZone and isDiscount and (not i_reqMTF or inst_bullish) and (not i_reqFVG or ta.barssince(bullFVG) < 5)
+shortCond = is_mss_short and isKillZone and isPremium  and (not i_reqMTF or inst_bearish) and (not i_reqFVG or ta.barssince(bearFVG) < 5)
+
+// --- Signal Visuals ---
+plotshape(longCond,  "Long Entry",  shape.triangleup, location.belowbar, color.new(color.lime, 0), size=size.normal)
+plotshape(shortCond, "Short Entry", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.normal)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 5 — DYNAMIC RISK BOXES
+// ═══════════════════════════════════════════════════════════
+
+if longCond
+    float sl = lastSL - (atr * 0.5)
+    float dr = close - sl
+    float tp1 = close + (dr * i_tpM1)
+    float tp2 = close + (dr * i_tpM2)
+    
+    line.new(bar_index, close, bar_index+20, close, color=color.gray)
+    line.new(bar_index, tp1, bar_index+20, tp1, color=color.lime)
+    line.new(bar_index, tp2, bar_index+20, tp2, color=color.lime, width=2)
+    line.new(bar_index, sl, bar_index+20, sl, color=color.red)
+    box.new(bar_index, tp2, bar_index+20, close, bgcolor=color.new(color.lime, 90), border_color=na)
+    box.new(bar_index, close, bar_index+20, sl, bgcolor=color.new(color.red, 90), border_color=na)
+    
+    label.new(bar_index, low - atr, "LONG: TP1 (" + str.tostring(i_tpM1) + "R) | TP2 (" + str.tostring(i_tpM2) + "R)", style=label.style_label_up, color=color.white, textcolor=color.black)
+
+if shortCond
+    float sl = lastSH + (atr * 0.5)
+    float dr = sl - close
+    float tp1 = close - (dr * i_tpM1)
+    float tp2 = close - (dr * i_tpM2)
+    
+    line.new(bar_index, close, bar_index+20, close, color=color.gray)
+    line.new(bar_index, tp1, bar_index+20, tp1, color=color.lime)
+    line.new(bar_index, tp2, bar_index+20, tp2, color=color.lime, width=2)
+    line.new(bar_index, sl, bar_index+20, sl, color=color.red)
+    box.new(bar_index, sl, bar_index+20, close, bgcolor=color.new(color.red, 90), border_color=na)
+    box.new(bar_index, close, bar_index+20, tp2, bgcolor=color.new(color.lime, 90), border_color=na)
+    
+    label.new(bar_index, high + atr, "SHORT: TP1 (" + str.tostring(i_tpM1) + "R) | TP2 (" + str.tostring(i_tpM2) + "R)", style=label.style_label_down, color=color.white, textcolor=color.black)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 6 — HUD DASHBOARD
+// ═══════════════════════════════════════════════════════════
+
+var table dash = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 80), border_color=color.new(color.gray, 80), border_width=1)
+
+if barstate.islast and i_showD
+    string sessionStr = isLon ? "London active" : isNY ? "NY active" : "Outside Kill Zones"
+    color sessionCol = isKillZone ? color.lime : color.red
+    
+    table.cell(dash, 0, 0, "Asset Profile:", text_color=color.white)
+    table.cell(dash, 1, 0, isGold ? "Gold (Metals)" : isNasdaq ? "Nasdaq (Tech)" : isDax ? "Dax (Indice)" : "Custom", text_color=color.yellow)
+    
+    table.cell(dash, 0, 1, "Session Status:", text_color=color.white)
+    table.cell(dash, 1, 1, sessionStr, text_color=sessionCol)
+    
+    table.cell(dash, 0, 2, "Inst. Bias:", text_color=color.white)
+    table.cell(dash, 1, 2, inst_bullish ? "Bullish Alignment" : inst_bearish ? "Bearish Alignment" : "Neutral", text_color=inst_bullish ? color.lime : inst_bearish ? color.red : color.gray)
+    
+    table.cell(dash, 0, 3, "Range State:", text_color=color.white)
+    table.cell(dash, 1, 3, isDiscount ? "Discount (Buy)" : isPremium ? "Premium (Sell)" : "Midpoint", text_color=isDiscount ? color.lime : isPremium ? color.red : color.white)
+    
+    table.cell(dash, 0, 4, "Risk / Trade:", text_color=color.white)
+    table.cell(dash, 1, 4, str.tostring(i_risk) + "% Recommended", text_color=color.aqua)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 7 — ALERTS
+// ═══════════════════════════════════════════════════════════
+if longCond
+    alert("⚡ CONFLUENCE LONG: MSS + FVG @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+if shortCond
+    alert("⚡ CONFLUENCE SHORT: MSS + FVG @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)

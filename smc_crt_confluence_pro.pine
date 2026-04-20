@@ -1,0 +1,195 @@
+// ============================================================
+// SMC + CRT PRO CONFLUENCE (LIQUIDITY SWEEP & MT5 BRIDGE)
+// ============================================================
+//@version=6
+indicator("SMC + CRT Confluence PRO [v6]", overlay=true, max_boxes_count=100, max_lines_count=100, max_labels_count=100)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 1 — INPUTS
+// ═══════════════════════════════════════════════════════════
+
+i_swingLen    = input.int(10,    "Swing Length (bars)",          group="⚙️ Core Settings", minval=3, maxval=50)
+i_atrLen      = input.int(14,    "ATR Length",                   group="⚙️ Core Settings")
+
+i_showEma     = input.bool(true, "Show EMA Trend Filters",       group="📈 Trend Filter")
+i_emaFast     = input.int(50,    "EMA Fast",                     group="📈 Trend Filter")
+i_emaSlow     = input.int(200,   "EMA Slow",                     group="📈 Trend Filter")
+
+i_sweepReq    = input.bool(true, "Require Liquidity Sweep first",group="🧹 Liquidity Sweep")
+
+i_showOB      = input.bool(false,"Show Raw Order Blocks",        group="🔷 SMC")
+i_showBOS     = input.bool(true, "Show Break of Structure",      group="🔷 SMC")
+
+i_visualDist  = input.int(5,     "Box Offset Distance",          group="🎯 Signals Display")
+i_lineLen     = input.int(15,    "TP/SL Lines Length",           group="🎯 Signals Display")
+i_tp1_mult    = input.float(1.5, "TP1 ATR Multiplier (Risk)",    group="🎯 Signals Display", step=0.1)
+i_tp2_mult    = input.float(3.0, "TP2 ATR Multiplier (Runner)",  group="🎯 Signals Display", step=0.1)
+
+// Colors
+c_bull = color.new(#00ffaa, 0)
+c_bear = color.new(#ff3355, 0)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 2 — CORE DATA & STRUCTURE
+// ═══════════════════════════════════════════════════════════
+atr      = ta.atr(i_atrLen)
+emaFast  = ta.ema(close, i_emaFast)
+emaSlow  = ta.ema(close, i_emaSlow)
+
+// Swings
+swingHigh = ta.pivothigh(high, i_swingLen, i_swingLen)
+swingLow  = ta.pivotlow(low,  i_swingLen, i_swingLen)
+
+var float lastSwingHigh = na
+var float lastSwingLow  = na
+var int   lastSHBar     = na
+var int   lastSLBar     = na
+
+if not na(swingHigh)
+    lastSwingHigh := swingHigh
+    lastSHBar     := bar_index[i_swingLen]
+if not na(swingLow)
+    lastSwingLow := swingLow
+    lastSLBar    := bar_index[i_swingLen]
+
+// Trend Context
+var int trendState = 0
+var float prevSH   = na
+var float prevSL   = na
+
+if not na(lastSwingHigh) and not na(lastSwingLow)
+    isHH = not na(prevSH) and lastSwingHigh > prevSH
+    isHL = not na(prevSL) and lastSwingLow  > prevSL
+    isLH = not na(prevSH) and lastSwingHigh < prevSH
+    isLL = not na(prevSL) and lastSwingLow  < prevSL
+    if isHH and isHL
+        trendState := 1
+    else if isLH and isLL
+        trendState := -1
+
+if not na(swingHigh)
+    prevSH := swingHigh
+if not na(swingLow)
+    prevSL := swingLow
+
+emaBullish = emaFast > emaSlow
+emaBearish = emaFast < emaSlow
+trendUp    = trendState ==  1 and emaBullish
+trendDown  = trendState == -1 and emaBearish
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 3 — LIQUIDITY SWEEPS & ORDER BLOCKS
+// ═══════════════════════════════════════════════════════════
+
+// Liquidity sweep: price wicks past last swing, but closes inside it.
+bullSweep = low < lastSwingLow and close > lastSwingLow
+bearSweep = high > lastSwingHigh and close < lastSwingHigh
+
+// Momentum / OB identification
+strongBullMove = (close - open) > atr * 1.5 and close > open
+strongBearMove = (open - close) > atr * 1.5 and open > close
+bullOB         = strongBullMove and open[1] > close[1]
+bearOB         = strongBearMove and close[1] > open[1]
+
+// State variables to remember sweeps
+var bool recentBullSweep = false
+var bool recentBearSweep = false
+var int  sweepBullBar    = 0
+var int  sweepBearBar    = 0
+
+if bullSweep
+    recentBullSweep := true
+    sweepBullBar := bar_index
+if bearSweep
+    recentBearSweep := true
+    sweepBearBar := bar_index
+
+// Reset sweeps if too much time passes (e.g. 20 bars)
+if bar_index - sweepBullBar > 20
+    recentBullSweep := false
+if bar_index - sweepBearBar > 20
+    recentBearSweep := false
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 4 — SIGNAL GENERATION & DRAWING
+// ═══════════════════════════════════════════════════════════
+
+longSignal = bullOB and trendUp and (not i_sweepReq or recentBullSweep)
+shortSignal= bearOB and trendDown and (not i_sweepReq or recentBearSweep)
+
+// Ensure one signal per wave
+var int lastSigBar = 0
+
+isNewLong = longSignal and (bar_index - lastSigBar) > 10
+isNewShort = shortSignal and (bar_index - lastSigBar) > 10
+
+if isNewLong or isNewShort
+    lastSigBar := bar_index
+
+// Drawings
+if isNewLong
+    float risk = atr * i_tp1_mult
+    float sl   = low - (atr * 0.5) // Buffer below entry candle
+    float entry_price = close
+    float tp1 = entry_price + risk
+    float tp2 = entry_price + (risk * (i_tp2_mult / i_tp1_mult))
+    
+    int boxL = bar_index + i_visualDist
+    int boxR = boxL + 8
+    
+    // Tiny connector line
+    line.new(bar_index, close, boxL, close, color=color.new(c_bull, 50), style=line.style_dotted)
+    
+    // Label Box Instead of drawn box for text wrap
+    lblText = "LONG EXECUTED\nEntry: " + str.tostring(entry_price, "#.##") + "\nTP1: " + str.tostring(tp1, "#.##") + "\nTP2: " + str.tostring(tp2, "#.##") + "\nSL: " + str.tostring(sl, "#.##")
+    label.new(boxL, close, lblText, color=color.new(c_bull, 85), textcolor=color.black, style=label.style_label_left, size=size.small)
+    
+    // Horizontal Lines across chart for tracking
+    line.new(boxL, entry_price, boxL + i_lineLen, entry_price, color=color.gray, width=1)
+    line.new(boxL, tp1, boxL + i_lineLen, tp1, color=color.green, width=2)
+    line.new(boxL, tp2, boxL + i_lineLen, tp2, color=color.teal, width=2)
+    line.new(boxL, sl,  boxL + i_lineLen, sl,  color=color.red, width=2)
+    
+    recentBullSweep := false // Reset after execution
+
+if isNewShort
+    float risk = atr * i_tp1_mult
+    float sl   = high + (atr * 0.5)
+    float entry_price = close
+    float tp1 = entry_price - risk
+    float tp2 = entry_price - (risk * (i_tp2_mult / i_tp1_mult))
+    
+    int boxL = bar_index + i_visualDist
+    int boxR = boxL + 8
+    
+    // Tiny connector line
+    line.new(bar_index, close, boxL, close, color=color.new(c_bear, 50), style=line.style_dotted)
+    
+    // Label Box Instead of drawn box for text wrap
+    lblText = "SHORT EXECUTED\nEntry: " + str.tostring(entry_price, "#.##") + "\nTP1: " + str.tostring(tp1, "#.##") + "\nTP2: " + str.tostring(tp2, "#.##") + "\nSL: " + str.tostring(sl, "#.##")
+    label.new(boxL, close, lblText, color=color.new(c_bear, 85), textcolor=color.white, style=label.style_label_left, size=size.small)
+    
+    // Horizontal Lines across chart for tracking
+    line.new(boxL, entry_price, boxL + i_lineLen, entry_price, color=color.gray, width=1)
+    line.new(boxL, tp1, boxL + i_lineLen, tp1, color=color.green, width=2)
+    line.new(boxL, tp2, boxL + i_lineLen, tp2, color=color.teal, width=2)
+    line.new(boxL, sl,  boxL + i_lineLen, sl,  color=color.red, width=2)
+    
+    recentBearSweep := false
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 5 — ALERTS (JSON payload for Exness Bot)
+// ═══════════════════════════════════════════════════════════
+
+float curr_sl = isNewLong ? low - (atr*0.5) : isNewShort ? high + (atr*0.5) : na
+float curr_risk = atr * i_tp1_mult
+float curr_tp1 = isNewLong ? close + curr_risk : isNewShort ? close - curr_risk : na
+float curr_tp2 = isNewLong ? close + (curr_risk * (i_tp2_mult / i_tp1_mult)) : isNewShort ? close - (curr_risk * (i_tp2_mult / i_tp1_mult)) : na
+
+if isNewLong
+    json_long = '{"symbol": "{{ticker}}", "side": "buy", "price": {{close}}, "sl": ' + str.tostring(curr_sl) + ', "tp1": ' + str.tostring(curr_tp1) + ', "tp2": ' + str.tostring(curr_tp2) + '}'
+    alert(json_long, alert.freq_once_per_bar_close)
+
+if isNewShort
+    json_short = '{"symbol": "{{ticker}}", "side": "sell", "price": {{close}}, "sl": ' + str.tostring(curr_sl) + ', "tp1": ' + str.tostring(curr_tp1) + ', "tp2": ' + str.tostring(curr_tp2) + '}'
+    alert(json_short, alert.freq_once_per_bar_close)

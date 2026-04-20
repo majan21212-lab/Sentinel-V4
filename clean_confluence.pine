@@ -1,0 +1,105 @@
+//@version=6
+strategy("Clean Confluence Pro (Ghost Mode)", overlay=true, initial_capital=1000, max_bars_back=500)
+
+// --- 1. SETTINGS (Background Logic) ---
+// These control the "Brain" of the strategy but won't clutter the chart
+group_logic  = "Strategy Logic"
+useEma       = input.bool(true, "Filter: EMA 200 Trend", group=group_logic)
+useCloud     = input.bool(true, "Filter: Ichimoku Cloud", group=group_logic)
+useRsi       = input.bool(true, "Filter: RSI Momentum", group=group_logic)
+useVol       = input.bool(true, "Filter: Volume Force", group=group_logic)
+
+// Risk
+group_risk   = "Risk Management"
+tpRatio      = input.float(2.0, "Risk:Reward Ratio", step=0.1, group=group_risk)
+atrMult      = input.float(1.5, "SL ATR Multiplier", step=0.1, group=group_risk)
+
+// Visuals
+group_vis    = "Visuals"
+showCandleColor = input.bool(true, "Color Candles by Trend", group=group_vis)
+
+// --- 2. BACKGROUND CALCULATIONS (The Ghost) ---
+
+// A. Trend (EMA)
+ema200 = ta.ema(close, 200)
+trendBull_Ema = not useEma or close > ema200
+trendBear_Ema = not useEma or close < ema200
+
+// B. Structure (Ichimoku Cloud)
+// We calculate standard settings (9, 26, 52)
+tenkan  = math.avg(ta.lowest(9), ta.highest(9))
+kijun   = math.avg(ta.lowest(26), ta.highest(26))
+senkouA = math.avg(tenkan, kijun)
+senkouB = math.avg(ta.lowest(52), ta.highest(52))
+// Current Cloud Bounds (Displaced 26)
+cloudTop    = math.max(senkouA[26], senkouB[26])
+cloudBottom = math.min(senkouA[26], senkouB[26])
+
+trendBull_Cloud = not useCloud or close > cloudTop
+trendBear_Cloud = not useCloud or close < cloudBottom
+
+// C. Momentum (RSI)
+rsiVal = ta.rsi(close, 14)
+trendBull_Rsi = not useRsi or rsiVal > 50
+trendBear_Rsi = not useRsi or rsiVal < 50
+
+// D. Force (Volume Z-Score - Swift Algo)
+volAvg   = ta.sma(volume, 20)
+volStd   = ta.stdev(volume, 20)
+volZ     = (volume - volAvg) / (volStd == 0 ? 1 : volStd) // Safet check
+volForce = ta.ema(volZ, 3)
+volConfirm = not useVol or volForce > 1.0 // Threshold 1.0
+
+// --- 3. SIGNAL GENERATION ---
+// Confluence: All active filters must agree
+bool buySignal  = trendBull_Ema and trendBull_Cloud and trendBull_Rsi and volConfirm and (ta.crossover(tenkan, kijun) or ta.crossover(close, cloudTop))
+bool sellSignal = trendBear_Ema and trendBear_Cloud and trendBear_Rsi and volConfirm and (ta.crossunder(tenkan, kijun) or ta.crossunder(close, cloudBottom))
+
+// --- 4. EXECUTION ---
+atrVal = ta.atr(14)
+
+if buySignal and strategy.position_size == 0
+    float sl = close - (atrVal * atrMult)
+    float risk = close - sl
+    float tp = close + (risk * tpRatio)
+    
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Exit Long", "Long", stop=sl, limit=tp)
+    
+    // Clean Label
+    label.new(bar_index, low - atrVal, 
+             text="BUY\nTARGET: " + str.tostring(tp, "#.##"), 
+             color=color.green, style=label.style_label_up, textcolor=color.white, size=size.small)
+
+if sellSignal and strategy.position_size == 0
+    float sl = close + (atrVal * atrMult)
+    float risk = sl - close
+    float tp = close - (risk * tpRatio)
+    
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Exit Short", "Short", stop=sl, limit=tp)
+    
+    // Clean Label
+    label.new(bar_index, high + atrVal, 
+             text="SELL\nTARGET: " + str.tostring(tp, "#.##"), 
+             color=color.red, style=label.style_label_down, textcolor=color.white, size=size.small)
+
+// --- 5. CLEAN VISUALS ---
+// No plots of lines!
+// Only optional candle coloring to show "State"
+// Green = Full Bullish Confluence
+// Red   = Full Bearish Confluence
+// Gray  = Neutral / Choppy
+color stateColor = color.gray
+if trendBull_Ema and trendBull_Cloud
+    stateColor := color.new(color.green, 50)
+if trendBear_Ema and trendBear_Cloud
+    stateColor := color.new(color.red, 50)
+
+barcolor(showCandleColor ? stateColor : na)
+
+// --- Result Tracker (Clean) ---
+if strategy.closedtrades > strategy.closedtrades[1]
+    bool isWin = strategy.closedtrades.profit(strategy.closedtrades - 1) > 0
+    // Small dot only
+    label.new(bar_index, high + atrVal*3, isWin ? "•" : "x", color=isWin ? color.green : color.red, style=label.style_none, textcolor=isWin ? color.green : color.red)

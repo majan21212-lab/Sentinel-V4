@@ -1,0 +1,220 @@
+//@version=5
+indicator("Harmonic Pattern V2 & Confluence Engine", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ==============================================================================
+// INPUT SETTINGS
+// ==============================================================================
+grp_main = "Pattern Detection Settings"
+zz_depth = input.int(10, "ZigZag Depth (Right/Left Bars)", minval=2, group=grp_main, tooltip="Controls the size of the swings. Higher values find larger patterns.")
+error_tol = input.float(15.0, "Ratio Error Tolerance (%)", minval=1.0, maxval=50.0, step=1.0, group=grp_main, tooltip="How much deviation to allow from perfect Fibonacci ratios (e.g., 15%).") / 100.0
+
+grp_trend = "Trend Confluence (Filter)"
+use_trend = input.bool(true, "Use Current Trend Filter?", group=grp_trend, tooltip="Ensures trades are only taken in the direction of the EMA.")
+ema_len = input.int(200, "Moving Average Length", minval=10, group=grp_trend)
+
+grp_risk = "Risk Management (Targets)"
+rr_ratio = input.float(2.0, "Risk/Reward Ratio (TP2)", minval=0.5, step=0.1, group=grp_risk, tooltip="Determines the placement of TP2 relative to your Stop Loss risk.")
+show_target_lines = input.bool(true, "Draw Target & Stop Loss Levels?", group=grp_risk)
+
+// ==============================================================================
+// TREND CONFLUENCE FILTER
+// ==============================================================================
+ema_trend = ta.ema(close, ema_len)
+plot(ema_trend, "Trend EMA", color=color.new(color.blue, 30), linewidth=2)
+
+// Determine valid trend zones based on the EMA
+trend_bull = use_trend ? close > ema_trend : true
+trend_bear = use_trend ? close < ema_trend : true
+
+// ==============================================================================
+// ZIGZAG CALCULATION ARRAY
+// ==============================================================================
+var float[] pPrices = array.new_float(0)
+var int[] pTimes = array.new_int(0)
+var int[] pTypes = array.new_int(0) // 1 for High, -1 for Low
+
+float ph = ta.pivothigh(high, zz_depth, zz_depth)
+float pl = ta.pivotlow(low, zz_depth, zz_depth)
+
+int last_type = array.size(pTypes) > 0 ? array.get(pTypes, 0) : 0
+
+// Update Last Pivot or Add New securely
+if not na(ph)
+    if last_type != 1
+        array.unshift(pPrices, ph)
+        array.unshift(pTimes, time[zz_depth])
+        array.unshift(pTypes, 1)
+    else
+        if ph > array.get(pPrices, 0)
+            array.set(pPrices, 0, ph)
+            array.set(pTimes, 0, time[zz_depth])
+
+if not na(pl)
+    if last_type != -1
+        array.unshift(pPrices, pl)
+        array.unshift(pTimes, time[zz_depth])
+        array.unshift(pTypes, -1)
+    else
+        if pl < array.get(pPrices, 0)
+            array.set(pPrices, 0, pl)
+            array.set(pTimes, 0, time[zz_depth])
+
+// Keep array size manageable for efficiency
+if array.size(pPrices) > 10
+    array.pop(pPrices)
+    array.pop(pTimes)
+    array.pop(pTypes)
+
+// ==============================================================================
+// PATTERN RECOGNITION EXECUTOR
+// ==============================================================================
+in_range(val, target, tol) => 
+    val >= target * (1 - tol) and val <= target * (1 + tol)
+
+// Pre-defined harmonic ratios
+check_gartley(xab, abc, bcd, xad, tol) =>
+    in_range(xab, 0.618, tol) and abc >= 0.382 and abc <= 0.886 and bcd >= 1.13 and bcd <= 1.618 and in_range(xad, 0.786, tol)
+
+check_bat(xab, abc, bcd, xad, tol) =>
+    xab >= 0.382 * (1 - tol) and xab <= 0.50 * (1 + tol) and abc >= 0.382 and abc <= 0.886 and bcd >= 1.618 and bcd <= 2.618 and in_range(xad, 0.886, tol)
+
+check_butterfly(xab, abc, bcd, xad, tol) =>
+    in_range(xab, 0.786, tol) and abc >= 0.382 and abc <= 0.886 and bcd >= 1.618 and bcd <= 2.618 and in_range(xad, 1.27, tol)
+
+check_crab(xab, abc, bcd, xad, tol) =>
+    xab >= 0.382 * (1 - tol) and xab <= 0.618 * (1 + tol) and abc >= 0.382 and abc <= 0.886 and bcd >= 2.24 and bcd <= 3.618 and in_range(xad, 1.618, tol)
+
+var int last_d_time = 0
+
+// Current execution state trackers
+valid_bull = false
+valid_bear = false
+pattern_name = ""
+target_entry = 0.0
+target_tp1 = 0.0
+target_tp2 = 0.0
+target_tp3 = 0.0
+target_sl = 0.0
+
+if array.size(pPrices) >= 5
+    d_time = array.get(pTimes, 0)
+    
+    // Check if new D point is confirmed ensuring single prints without repaint
+    if d_time != last_d_time
+        d = array.get(pPrices, 0)
+        c = array.get(pPrices, 1)
+        b = array.get(pPrices, 2)
+        a = array.get(pPrices, 3)
+        x = array.get(pPrices, 4)
+        
+        // Structure magnitude calculations
+        xa = math.abs(a - x)
+        ab = math.abs(b - a)
+        bc = math.abs(c - b)
+        cd = math.abs(d - c)
+        xd = math.abs(d - x)
+        
+        // Safety lock
+        if xa > 0 and ab > 0 and bc > 0
+            xab = ab / xa
+            abc = bc / ab
+            bcd = cd / bc
+            xad = xd / xa
+            
+            is_gartley = check_gartley(xab, abc, bcd, xad, error_tol)
+            is_bat = check_bat(xab, abc, bcd, xad, error_tol)
+            is_butterfly = check_butterfly(xab, abc, bcd, xad, error_tol)
+            is_crab = check_crab(xab, abc, bcd, xad, error_tol)
+            
+            any_pattern = is_gartley or is_bat or is_butterfly or is_crab
+            
+            if any_pattern
+                p_name = is_gartley ? "Gartley Pattern" : is_bat ? "Bat Pattern" : is_butterfly ? "Butterfly Pattern" : "Crab Pattern"
+                
+                // Classify shape sequence layout
+                is_curr_low = array.get(pTypes, 0) == -1
+                is_curr_high = array.get(pTypes, 0) == 1
+                
+                // Pure topological M vs W shape checks
+                topo_bull = (a > x) and (b < a) and (c > b) and (d < c)
+                topo_bear = (a < x) and (b > a) and (c < b) and (d > c)
+                
+                if is_curr_low and trend_bull and topo_bull
+                    valid_bull := true
+                    pattern_name := p_name
+                    last_d_time := d_time
+                    target_entry := close
+                    target_sl := math.min(x, d) - ta.atr(14)
+                    risk = target_entry - target_sl
+                    target_tp1 := target_entry + (a - d) * 0.382 // 38.2% AD projection
+                    target_tp2 := target_entry + (risk * rr_ratio)      // Main RR target
+                    target_tp3 := target_entry + (risk * (rr_ratio * 1.5)) // Moonbag higher target
+                    
+                if is_curr_high and trend_bear and topo_bear
+                    valid_bear := true
+                    pattern_name := p_name
+                    last_d_time := d_time
+                    target_entry := close
+                    target_sl := math.max(x, d) + ta.atr(14)
+                    risk = target_sl - target_entry
+                    target_tp1 := target_entry - (d - a) * 0.382
+                    target_tp2 := target_entry - (risk * rr_ratio)
+                    target_tp3 := target_entry - (risk * (rr_ratio * 1.5))
+
+// ==============================================================================
+// VISUAL DRAWING ENGINE
+// ==============================================================================
+if valid_bull or valid_bear
+    // Dynamic styling
+    colur = valid_bull ? color.new(color.teal, 0) : color.new(color.maroon, 0)
+    
+    // Coordinates
+    tX = array.get(pTimes, 4), pX = array.get(pPrices, 4)
+    tA = array.get(pTimes, 3), pA = array.get(pPrices, 3)
+    tB = array.get(pTimes, 2), pB = array.get(pPrices, 2)
+    tC = array.get(pTimes, 1), pC = array.get(pPrices, 1)
+    tD = array.get(pTimes, 0), pD = array.get(pPrices, 0)
+    
+    // Core pattern borders
+    line.new(tX, pX, tA, pA, xloc.bar_time, color=colur, width=2)
+    line.new(tA, pA, tB, pB, xloc.bar_time, color=colur, width=2)
+    line.new(tB, pB, tC, pC, xloc.bar_time, color=colur, width=2)
+    line.new(tC, pC, tD, pD, xloc.bar_time, color=colur, width=2)
+    
+    // Internal geometric references
+    line.new(tX, pX, tB, pB, xloc.bar_time, color=colur, style=line.style_dotted)
+    line.new(tX, pX, tD, pD, xloc.bar_time, color=colur, style=line.style_dashed)
+    line.new(tB, pB, tD, pD, xloc.bar_time, color=colur, style=line.style_dotted)
+    
+    // Actionable signal marker plotted strictly at confirmation close
+    lbl_text = pattern_name + (valid_bull ? "\nDETECTED" : "\nDETECTED")
+    label.new(time, close, lbl_text, xloc.bar_time, yloc=valid_bull ? yloc.belowbar : yloc.abovebar, color=colur, textcolor=color.white, style=valid_bull ? label.style_label_up : label.style_label_down, size=size.small)
+    
+    if show_target_lines
+        int f_time = time + (time - time[1]) * 15 // project exactly 15 bars forward
+        
+        // SL Line (Red)
+        line.new(time, target_sl, f_time, target_sl, xloc.bar_time, color=color.red, width=2, style=line.style_solid)
+        label.new(f_time, target_sl, "🔴 SL", xloc.bar_time, color=color.new(color.red, 100), textcolor=color.red, style=label.style_none, size=size.small)
+        
+        // ENTRY Line (Green) - With Pattern Name
+        line.new(time, target_entry, f_time, target_entry, xloc.bar_time, color=color.green, width=3, style=line.style_solid)
+        label.new(f_time, target_entry, "🟢 " + pattern_name + " ENTRY", xloc.bar_time, color=color.new(color.green, 100), textcolor=color.green, style=label.style_none, size=size.small)
+        
+        // TP1 Line (Orange)
+        line.new(time, target_tp1, f_time, target_tp1, xloc.bar_time, color=color.orange, width=2, style=line.style_dashed)
+        label.new(f_time, target_tp1, "🟠 TP1", xloc.bar_time, color=color.new(color.orange, 100), textcolor=color.orange, style=label.style_none, size=size.small)
+        
+        // TP2 Line (Blue)
+        line.new(time, target_tp2, f_time, target_tp2, xloc.bar_time, color=color.blue, width=2, style=line.style_solid)
+        label.new(f_time, target_tp2, "🔵 TP2", xloc.bar_time, color=color.new(color.blue, 100), textcolor=color.blue, style=label.style_none, size=size.small)
+        
+        // TP3 Line (Purple)
+        line.new(time, target_tp3, f_time, target_tp3, xloc.bar_time, color=color.purple, width=3, style=line.style_solid)
+        label.new(f_time, target_tp3, "🟣 TP3 (Max)", xloc.bar_time, color=color.new(color.purple, 100), textcolor=color.purple, style=label.style_none, size=size.small)
+
+// ==============================================================================
+// ALERT ENGINE
+// ==============================================================================
+alertcondition(valid_bull, title="Bullish Harmonic Pattern", message="Bullish Harmonic Pattern Detected. Check Entry/SL/TP levels.")
+alertcondition(valid_bear, title="Bearish Harmonic Pattern", message="Bearish Harmonic Pattern Detected. Check Entry/SL/TP levels.")

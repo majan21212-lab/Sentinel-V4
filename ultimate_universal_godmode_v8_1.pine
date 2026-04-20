@@ -1,0 +1,260 @@
+// ============================================================
+// ULTIMATE UNIVERSAL GOD-MODE ENGINE (v8.1) — Institutional Pro
+// Features: 14-Factor Heatmap, Dynamic Zone Mitigation, Position Sizing
+// ============================================================
+//@version=6
+indicator("Ultimate Universal God-Mode [v8.1 Pro]", overlay=true, max_boxes_count=300, max_lines_count=300, max_labels_count=300)
+
+// SECTION 1 — UNIVERSAL PRESET ENGINE (AUTO-TUNE)
+
+grp_preset = "🌎 Universal Institutional Presets"
+i_mktType  = input.string("Auto Detect", "Market Preset", options=["Auto Detect", "Indices (US100/DE40)", "Metals (Gold/Silver)", "Crypto (BTC/ETH)", "Forex (Majors)", "Stocks/Custom"], group=grp_preset)
+
+// --- Auto-Detection Matrix ---
+var string mkt = i_mktType
+if i_mktType == "Auto Detect"
+    if str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD") or str.contains(syminfo.ticker, "XAG")
+        mkt := "Metals (Gold/Silver)"
+    else if str.contains(syminfo.ticker, "US100") or str.contains(syminfo.ticker, "NAS100") or str.contains(syminfo.ticker, "NDX") or str.contains(syminfo.ticker, "DAX") or str.contains(syminfo.ticker, "DE40")
+        mkt := "Indices (US100/DE40)"
+    else if str.contains(syminfo.ticker, "BTC") or str.contains(syminfo.ticker, "ETH") or str.contains(syminfo.ticker, "USDT") or syminfo.type == "crypto"
+        mkt := "Crypto (BTC/ETH)"
+    else if syminfo.type == "forex"
+        mkt := "Forex (Majors)"
+    else
+        mkt := "Stocks/Custom"
+
+// --- Adaptive Parameter Mapping ---
+p_swing   = mkt == "Forex (Majors)" ? 5 : mkt == "Crypto (BTC/ETH)" ? 12 : 8
+p_orbSess = mkt == "Indices (US100/DE40)" ? "New York (0930-1000)" : mkt == "Metals (Gold/Silver)" ? "New York (0930-1000)" : "Disabled/Crypto"
+p_atrM    = mkt == "Forex (Majors)" ? 1.5 : mkt == "Crypto (BTC/ETH)" ? 3.5 : 2.5
+
+// SECTION 2 — INPUTS
+
+grp_score = "🎯 The God-Mode Engine"
+i_reqScore = input.int(7, "Min Confluence Score (1-14)", minval=1, maxval=14, step=1, group=grp_score)
+i_orbSess  = input.string("Auto Detect", "ORB Session Override", options=["Auto Detect", "New York (0930-1000)", "London (0800-0830)", "Asian (2000-2030)", "Disabled/Crypto"], group=grp_score)
+final_orb  = i_orbSess == "Auto Detect" ? p_orbSess : i_orbSess
+
+grp_core  = "⚙️ Core Logic"
+i_swing   = input.int(0,     "Manual Override: Swing Pts", group=grp_core)
+final_sw  = i_swing == 0 ? p_swing : i_swing
+i_atrLen  = input.int(14,    "ATR Length",                  group=grp_core)
+i_atrM    = input.float(0.0, "ATR SL Override (0 = Auto)",  group=grp_core, step=0.1)
+final_atrM = i_atrM == 0.0 ? p_atrM : i_atrM
+i_tpM     = input.float(1.5, "TP R:R",                      group=grp_core, step=0.1)
+i_trail   = input.bool(true, "Hull Trailing Stop",          group=grp_core)
+
+grp_risk = "💰 Institutional Position Sizing"
+i_balance = input.float(10000.0, "Account Balance ($)",     group=grp_risk)
+i_riskPct = input.float(1.0,     "Risk Per Trade (%)",      group=grp_risk, step=0.1)
+
+grp_ui    = "🎨 Visuals & HUD"
+i_showD   = input.bool(true, "Show 14-Factor Heatmap",     group=grp_ui)
+i_showZones = input.bool(true, "Draw SMC Boxes & Labels",   group=grp_ui)
+
+// SECTION 3 — 14-FACTOR GOD-MODE ENGINE
+
+// --- Common Tools ---
+atr      = ta.atr(i_atrLen)
+ema200   = ta.ema(close, 200)
+baseline = ta.hma(close, 25)
+
+// ── Factor 1: MTF Trend (4H + 1H) ──
+f_get_trend(_tf) =>
+    _bull = close > ta.ema(close, 200)
+    _bear = close < ta.ema(close, 200)
+    _resBull = request.security(syminfo.tickerid, _tf, _bull[1], lookahead=barmerge.lookahead_off)
+    _resBear = request.security(syminfo.tickerid, _tf, _bear[1], lookahead=barmerge.lookahead_off)
+    [_resBull, _resBear]
+
+[tf1_bull, tf1_bear] = f_get_trend("240")
+[tf2_bull, tf2_bear] = f_get_trend("60")
+mtfBull = tf1_bull and tf2_bull
+mtfBear = tf1_bear and tf2_bear
+
+// ── Factor 2: Hull Baseline ──
+bullHull = close > baseline
+bearHull = close < baseline
+
+// ── Factor 3: Volume Spike ──
+volAvg   = ta.sma(volume, 20)
+volStd   = ta.stdev(volume, 20)
+volZ     = (volume - volAvg) / math.max(volStd, 0.0001)
+volSpike = ta.ema(volZ, 3) > 1.2
+isVolActive = volume > volAvg
+bullVol = mkt == "Crypto (BTC/ETH)" ? isVolActive : volSpike
+
+// ── Factor 4: TMO Momentum ──
+osc      = ta.mom(ta.sma(ta.sma(close, 7), 7), 7)
+bullMom  = ta.change(osc) > 0
+bearMom  = ta.change(osc) < 0
+
+// ── Factor 5: SFP / Liquidity Sweeps ──
+ph = ta.pivothigh(high, final_sw, final_sw)
+pl = ta.pivotlow(low,   final_sw, final_sw)
+var float lastSH = na
+var float lastSL = na
+
+if not na(ph)
+    lastSH := ph
+if not na(pl)
+    lastSL := pl
+
+bullSweep = not na(lastSL) and low < lastSL and close > lastSL
+bearSweep = not na(lastSH) and high > lastSH and close < lastSH
+
+// Asset-specific visual labels
+if i_showZones
+    if bullSweep
+        label.new(bar_index, low, "💧 LIQ", style=label.style_label_up, color=color.new(color.white, 100), textcolor=color.aqua, size=size.tiny)
+    if bearSweep
+        label.new(bar_index, high, "💧 LIQ", style=label.style_label_down, color=color.new(color.white, 100), textcolor=color.orange, size=size.tiny)
+
+// ── Factor 6: Fib Golden Zone ──
+midpoint      = (lastSH + lastSL) / 2
+isDiscount    = close < midpoint
+isPremium     = close > midpoint
+
+// ── Factor 7: VWAP ──
+bullVWAP = close > ta.vwap
+bearVWAP = close < ta.vwap
+
+// ── Factor 8: Bollinger Bands ──
+bullBB = close > ta.sma(close, 20)
+bearBB = close < ta.sma(close, 20)
+
+// ── Factor 9: Daily Pivot Points ──
+prevDayHigh = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_off)
+prevDayLow  = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_off)
+prevDayClose = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_off)
+pivotLine   = (prevDayHigh + prevDayLow + prevDayClose) / 3
+bullPivot   = close > pivotLine
+bearPivot   = close < pivotLine
+
+// ── Factor 10: Fair Value Gap (FVG) with Mitigation Tracking ──
+bullFVG = low > high[2] and close[1] > open[1]
+bearFVG = high < low[2] and close[1] < open[1]
+
+var box fvgBox = na
+if i_showZones and bullFVG
+    fvgBox := box.new(bar_index-2, low, bar_index+10, high[2], bgcolor=color.new(color.lime, 90), border_color=na)
+if i_showZones and bearFVG
+    fvgBox := box.new(bar_index-2, high, bar_index+10, low[2], bgcolor=color.new(color.red, 90), border_color=na)
+
+// ── Factor 11: CHoCH / MSB ──
+bullMSB = ta.crossover(close, lastSH)
+bearMSB = ta.crossunder(close, lastSL)
+
+if i_showZones and bullMSB
+    label.new(bar_index, high, "✨ MSS", style=label.style_label_down, color=color.new(color.white, 100), textcolor=color.yellow, size=size.tiny)
+if i_showZones and bearMSB
+    label.new(bar_index, low, "✨ MSS", style=label.style_label_up, color=color.new(color.white, 100), textcolor=color.yellow, size=size.tiny)
+
+// ── Factor 12: SMC Breaker Blocks ──
+var float breakerH = na
+var float breakerL = na
+if bullMSB
+    breakerH := lastSH
+    breakerL := lastSH - (atr * 0.5)
+if bearMSB
+    breakerH := lastSL + (atr * 0.5)
+    breakerL := lastSL
+
+bullBreaker = not na(breakerH) and low <= breakerH and close > breakerL
+bearBreaker = not na(breakerL) and high >= breakerL and close < breakerH
+
+// ── Factor 13: ORB Breakout ──
+s_time = final_orb == "New York (0930-1000)" ? "0930-1000" : final_orb == "London (0800-0830)" ? "0800-0830" : "2000-2030"
+t_tz = final_orb == "New York (0930-1000)" ? "America/New_York" : final_orb == "London (0800-0830)" ? "Europe/London" : "Asia/Tokyo"
+t_sess = time(timeframe.period, s_time, t_tz)
+var float orbH = na
+var float orbL = na
+if not na(t_sess) and na(t_sess[1])
+    orbH := high
+    orbL := low
+else if not na(t_sess)
+    orbH := math.max(orbH, high)
+    orbL := math.min(orbL, low)
+bullORB = final_orb == "Disabled/Crypto" ? true : close > orbH
+bearORB = final_orb == "Disabled/Crypto" ? true : close < orbL
+
+// ── Factor 14: Adaptive Trend (RSI) ──
+rsi      = ta.rsi(close, 14)
+bullRSI  = rsi > 50
+bearRSI  = rsi < 50
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 4 — SIGNAL GATING & POSITION SIZING
+// ═══════════════════════════════════════════════════════════
+
+int longPts = (mtfBull?1:0)+(bullHull?1:0)+(bullVol?1:0)+(bullMom?1:0)+(bullSweep?1:0)+(isDiscount?1:0)+(bullVWAP?1:0)+(bullBB?1:0)+(bullPivot?1:0)+(bullFVG?1:0)+(bullMSB?1:0)+(bullBreaker?1:0)+(bullORB?1:0)+(bullRSI?1:0)
+int shortPts = (mtfBear?1:0)+(bearHull?1:0)+(bullVol?1:0)+(bearMom?1:0)+(bearSweep?1:0)+(isPremium?1:0)+(bearVWAP?1:0)+(bearBB?1:0)+(bearPivot?1:0)+(bearFVG?1:0)+(bearMSB?1:0)+(bearBreaker?1:0)+(bearORB?1:0)+(bearRSI?1:0)
+
+longCond  = (longPts >= i_reqScore)  and ta.crossover(close, baseline)
+shortCond = (shortPts >= i_reqScore) and ta.crossunder(close, baseline)
+
+// Trailing SL logic
+var float tSL_L = na
+var float tSL_S = na
+
+if longCond
+    tSL_L := lastSL - (atr * 0.5)
+if shortCond
+    tSL_S := lastSH// Hull Trailing Update
+if i_trail and barstate.isconfirmed
+    if not na(tSL_L)
+        tSL_L := math.max(tSL_L, baseline - (atr * 0.5))
+        if close < tSL_L
+            tSL_L := na
+    if not na(tSL_S)
+        tSL_S := math.min(tSL_S, baseline + (atr * 0.5))
+        if close > tSL_S
+            tSL_S := na
+
+// Risk Calculation
+riskAmt = (i_balance * i_riskPct) / 100
+longSize = not na(tSL_L) ? riskAmt / math.abs(close - tSL_L) : 0
+shortSize = not na(tSL_S) ? riskAmt / math.abs(tSL_S - close) : 0
+
+// SECTION 6 — 14-FACTOR MATRIX DASHBOARD
+
+var table dash = table.new(position.top_right, 4, 6, bgcolor=color.new(color.black, 85), border_color=color.new(color.gray, 80), border_width=1)
+
+f_color(_cond) => _cond ? color.new(color.lime, 40) : color.new(color.red, 40)
+
+if barstate.islast and i_showD
+    table.cell(dash, 0, 0, "INST. PROFILE", text_color=color.white, bgcolor=color.new(color.blue, 60))
+    table.cell(dash, 1, 0, mkt, text_color=color.yellow, bgcolor=color.new(color.blue, 60))
+    table.cell(dash, 2, 0, "RISK / POS", text_color=color.white, bgcolor=color.new(color.blue, 60))
+    table.cell(dash, 3, 0, str.tostring(i_riskPct) + "%", text_color=color.aqua, bgcolor=color.new(color.blue, 60))
+    
+    table.cell(dash, 0, 1, "MTF TREND", bgcolor=f_color(mtfBull), text_size=size.tiny)
+    table.cell(dash, 1, 1, "BASELINE", bgcolor=f_color(bullHull), text_size=size.tiny)
+    table.cell(dash, 2, 1, "SMC MSB", bgcolor=f_color(bullMSB), text_size=size.tiny)
+    table.cell(dash, 3, 1, "LIQ SWEEP", bgcolor=f_color(bullSweep), text_size=size.tiny)
+    
+    table.cell(dash, 0, 2, "BREAKER", bgcolor=f_color(bullBreaker), text_size=size.tiny)
+    table.cell(dash, 1, 2, "FVG STATUS", bgcolor=f_color(bullFVG), text_size=size.tiny)
+    table.cell(dash, 2, 2, "DISCOUNT", bgcolor=f_color(isDiscount), text_size=size.tiny)
+    table.cell(dash, 3, 2, "VWAP", bgcolor=f_color(bullVWAP), text_size=size.tiny)
+
+    table.cell(dash, 0, 3, "SCORE:", text_color=color.white)
+    table.cell(dash, 1, 3, str.tostring(longPts) + " L / " + str.tostring(shortPts) + " S", text_color=color.yellow)
+    
+    table.cell(dash, 2, 3, "REC. SIZE:", text_color=color.white)
+    table.cell(dash, 3, 3, str.tostring(longSize, "#.##") + " Units", text_color=color.aqua)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 6 — SIGNALS & ALERTS
+// ═══════════════════════════════════════════════════════════
+
+plotshape(longCond, "ENTRY L", shape.triangleup, location.belowbar, color.lime, size=size.normal)
+plotshape(shortCond, "ENTRY S", shape.triangledown, location.abovebar, color.red, size=size.normal)
+plot(tSL_L, "Trail L", color.new(color.lime, 50), style=plot.style_linebr, linewidth=2)
+plot(tSL_S, "Trail S", color.new(color.red, 50), style=plot.style_linebr, linewidth=2)
+
+if longCond
+    alert("V8.1 PRO LONG: " + str.tostring(longPts) + "/14 | Size: " + str.tostring(longSize, "#.##"), alert.freq_once_per_bar_close)
+if shortCond
+    alert("V8.1 PRO SHORT: " + str.tostring(shortPts) + "/14 | Size: " + str.tostring(shortSize, "#.##"), alert.freq_once_per_bar_close)

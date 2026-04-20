@@ -1,0 +1,112 @@
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// SENTINEL PORTFOLIO TRACKER — The Elite Dashboard (Pine Script v6)
+// Created by Antigravity (Advanced Agentic Coding)
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//@version=6
+strategy("Sentinel Portfolio Tracker", 
+     overlay=false, // Standalone equity pane
+     initial_capital=10000, 
+     currency=currency.USD,
+     default_qty_type=strategy.percent_of_equity, 
+     default_qty_value=10,
+     commission_type=strategy.commission.percent,
+     commission_value=0.01,
+     process_orders_on_close=true)
+
+// ── Groups & Inputs ────────────────────────────────────────────────────────────────────────────────────────────────
+G_UI   = "🎨 Dashboard Aesthetics"
+G_WEB  = "🌐 Webhook Configuration"
+G_TRD  = "⚙️ Demo Trade Logic"
+
+i_show_dash = input.bool(true, "Show Performance Dashboard", group=G_UI)
+i_bg_color  = input.color(color.new(#0d1117, 10), "Dashboard Background", group=G_UI)
+i_txt_color = input.color(color.white, "Text Color", group=G_UI)
+i_eq_bull   = input.color(#00E676, "Equity Line (Profit)", group=G_UI)
+i_eq_bear   = input.color(#FF1744, "Equity Line (Drawdown)", group=G_UI)
+
+i_n8n_secret = input.string("YOUR_SECRET", "N8N Webhook Secret", group=G_WEB)
+i_risk_pct   = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=10.0, step=0.1, group=G_WEB)
+
+i_use_demo   = input.bool(true, "Use Demo EMA Strategy (For Visualization)", group=G_TRD)
+i_ema_fast   = input.int(9, "Fast EMA", group=G_TRD)
+i_ema_slow   = input.int(21, "Slow EMA", group=G_TRD)
+
+// ── DEMO LOGIC (Replace with your own conditions) ──────────────────────────────────────────────────────────────────
+fastMA = ta.ema(close, i_ema_fast)
+slowMA = ta.ema(close, i_ema_slow)
+
+longCond  = ta.crossover(fastMA, slowMA)
+shortCond = ta.crossunder(fastMA, slowMA)
+
+// ── WEBHOOK JSON GENERATOR ─────────────────────────────────────────────────────────────────────────────────────────
+atr = ta.atr(14)
+sl_long  = close - (atr * 2)
+tp_long  = close + (atr * 3)
+sl_short = close + (atr * 2)
+tp_short = close - (atr * 3)
+
+json_payload(side, sl, tp) =>
+    '{"secret": "' + i_n8n_secret + '", "symbol": "' + syminfo.ticker + '", "side": "' + side + '", "entry": ' + str.tostring(close) + ', "sl": ' + str.tostring(sl) + ', "tp": ' + str.tostring(tp) + ', "risk": ' + str.tostring(i_risk_pct) + ', "id": "' + str.tostring(time) + '"}'
+
+if i_use_demo
+    if longCond
+        strategy.entry("Long", strategy.long, alert_message=json_payload("buy", sl_long, tp_long))
+        strategy.exit("Exit Long", "Long", stop=sl_long, limit=tp_long, alert_message='{"secret": "' + i_n8n_secret + '", "action": "close", "position": "Long"}')
+    if shortCond
+        strategy.entry("Short", strategy.short, alert_message=json_payload("sell", sl_short, tp_short))
+        strategy.exit("Exit Short", "Short", stop=sl_short, limit=tp_short, alert_message='{"secret": "' + i_n8n_secret + '", "action": "close", "position": "Short"}')
+
+// ── EQUITY VISUALIZER ──────────────────────────────────────────────────────────────────────────────────────────────
+curEquity = strategy.equity
+initCap   = strategy.initial_capital
+inProfit  = curEquity >= initCap
+
+plot_color = inProfit ? i_eq_bull : i_eq_bear
+fill_color = color.new(plot_color, 85)
+
+plot_eq = plot(curEquity, title="Portfolio Equity", color=plot_color, linewidth=3, style=plot.style_line)
+plot_base = plot(initCap, title="Initial Capital", color=color.new(color.gray, 50), linewidth=1, style=plot.style_circles)
+
+fill(plot_eq, plot_base, color=fill_color, title="Equity Area")
+
+// ── PORTFOLIO DASHBOARD ────────────────────────────────────────────────────────────────────────────────────────────
+// Draw exactly once on the last bar to save resources
+var table dash = table.new(position.top_right, 2, 8, bgcolor=i_bg_color, border_width=1, border_color=color.new(color.gray, 70), frame_color=color.new(color.white, 80), frame_width=1)
+
+if barstate.islast and i_show_dash
+    // Header
+    table.cell(dash, 0, 0, "♦ SENTINEL PORTFOLIO", text_color=color.white, text_halign=text.align_left, text_size=size.normal, bgcolor=color.new(#1A237E, 20))
+    table.merge_cells(dash, 0, 0, 1, 0)
+    
+    // Row 1: Equity
+    table.cell(dash, 0, 1, "Total Equity", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 1, "$" + str.tostring(math.round(strategy.equity, 2)), text_color=inProfit ? i_eq_bull : i_eq_bear, text_halign=text.align_right)
+    
+    // Row 2: Net Profit
+    float roi = (strategy.netprofit / initCap) * 100
+    table.cell(dash, 0, 2, "Net Profit", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 2, "$" + str.tostring(math.round(strategy.netprofit, 2)) + " (" + str.tostring(math.round(roi, 2)) + "%)", text_color=strategy.netprofit >= 0 ? i_eq_bull : i_eq_bear, text_halign=text.align_right)
+    
+    // Row 3: Win Rate
+    float winRate = strategy.closedtrades > 0 ? (strategy.wintrades / strategy.closedtrades) * 100 : 0.0
+    table.cell(dash, 0, 3, "Win Rate", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 3, str.tostring(math.round(winRate, 2)) + "%", text_color=i_txt_color, text_halign=text.align_right)
+
+    // Row 4: Trades
+    table.cell(dash, 0, 4, "Total Closed Trades", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 4, str.tostring(strategy.closedtrades), text_color=i_txt_color, text_halign=text.align_right)
+
+    // Row 5: Profit Factor
+    float profFactor = strategy.grossloss == 0 ? 999 : strategy.grossprofit / strategy.grossloss
+    table.cell(dash, 0, 5, "Profit Factor", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 5, str.tostring(math.round(profFactor, 2)), text_color=profFactor >= 1 ? i_eq_bull : i_eq_bear, text_halign=text.align_right)
+
+    // Row 6: Max Drawdown
+    float maxDd = strategy.max_drawdown
+    float ddPct = (maxDd / initCap) * 100
+    table.cell(dash, 0, 6, "Max Drawdown", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 6, "-$" + str.tostring(math.round(maxDd, 2)) + " (-" + str.tostring(math.round(ddPct, 2)) + "%)", text_color=i_eq_bear, text_halign=text.align_right)
+
+    // Row 7: Open PnL
+    table.cell(dash, 0, 7, "Open PnL", text_color=color.gray, text_halign=text.align_left)
+    table.cell(dash, 1, 7, "$" + str.tostring(math.round(strategy.openprofit, 2)), text_color=strategy.openprofit >= 0 ? i_eq_bull : i_eq_bear, text_halign=text.align_right)

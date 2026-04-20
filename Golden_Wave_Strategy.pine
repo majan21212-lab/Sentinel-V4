@@ -1,0 +1,171 @@
+//@version=6
+strategy("Golden Wave Institutional Engine [PRO]", overlay=true, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=5, max_labels_count=500, margin_long=100, margin_short=100)
+
+// ==========================================
+// 1. INPUTS
+// ==========================================
+grp_levels = "الشبكة الذهبية للمؤسسات"
+golden_step = input.float(50.0, "Golden Number Step", group=grp_levels, tooltip="Set to 50 for Gold (e.g. 2350, 2400). Set to 0.01 for Forex (e.g. 1.10).")
+zone_size = input.float(0.5, "Retest Zone ATR Multiplier", group=grp_levels, tooltip="حجم منطقة الارتداد حول الرقم الذهبي لجذب السعر")
+
+grp_trend = "فلتر الاتجاه المؤسسّي (Trend)"
+use_ema_trend = input.bool(true, "تفعيل الفلتر الصارم (EMA Cross)؟", group=grp_trend, tooltip="لا تأخذ صفقات إطلاقاً عكس المتوسطات 50 و 200")
+ema_fast_len = input.int(50, "EMA السريع", group=grp_trend)
+ema_slow_len = input.int(200, "EMA البطيء", group=grp_trend)
+
+grp_momentum = "تأكيدات الزخم ونهاية التصحيح"
+stoch_len = input.int(14, "طول دورة التصحيح (StochRSI)", group=grp_momentum)
+
+grp_risk = "إدارة الأهداف والمخاطر"
+rr = input.float(2.0, "Risk/Reward Target (R:R)", group=grp_risk)
+sl_atr_mult = input.float(2.5, "توسيع مسافة وقف الخسارة (ATR)", group=grp_risk, tooltip="قيمة 2.5 أو 3 تُبعد الوقف عن ذيول الشموع الوهمية وحركات صناع السوق السريعة (Stop Hunt).")
+show_labels = input.bool(true, "أظهر شاشات الدخول التفاعلية؟", group=grp_risk)
+min_bars = input.int(15, "Min Bars Between Signals (مسافة أفقية لتنظيم الشارت)", group=grp_risk, tooltip="يمنع رسم المربعات بجوار بعضها مباشرة عن طريق فرض مسافة زمنية بين الإشارات.")
+
+// ==========================================
+// 1.5 GLOBAL UTILITIES (إصلاح حسابات المؤشرات)
+// ==========================================
+// Extracting globally solves Pine Script historical scope issues (CW10002/CW10003)
+atr_val = ta.atr(14)
+lowest_5 = ta.lowest(low, 5)
+highest_5 = ta.highest(high, 5)
+
+// ==========================================
+// 2. MACRO TREND ALIGNMENT
+// ==========================================
+ema_fast = ta.ema(close, ema_fast_len)
+ema_slow = ta.ema(close, ema_slow_len)
+
+plot(ema_fast, color=color.new(color.orange, 0), title="EMA 50", linewidth=1)
+plot(ema_slow, color=color.new(color.blue, 0), title="EMA 200", linewidth=2)
+
+// Strict Trend: Fast EMA > Slow EMA + Price > Slow EMA
+trend_bull = use_ema_trend ? (ema_fast > ema_slow and close > ema_slow) : true
+trend_bear = use_ema_trend ? (ema_fast < ema_slow and close < ema_slow) : true
+
+// ==========================================
+// 3. GOLDEN LEVEL & SUPPORT ZONE
+// ==========================================
+calc_closest_level(p) => math.round(p / golden_step) * golden_step
+curr_golden = calc_closest_level(close)
+
+// Fixed plot style CE10272 syntax error by replacing hvline with stepline
+plot(curr_golden, color=color.new(color.yellow, 40), style=plot.style_stepline, linewidth=2, title="Active Golden Axis")
+
+// ==========================================
+// 4. EXHAUSTION ENGINE (StochRSI)
+// ==========================================
+// Used to mathematically confirm that the correction wave is DEAD, and big money has stepped back in.
+rsi_val = ta.rsi(close, stoch_len)
+k = ta.sma(ta.stoch(rsi_val, rsi_val, rsi_val, stoch_len), 3)
+d = ta.sma(k, 3)
+
+// Confirm momentum pivot: K crosses above D exactly while correction is deep (oversold)
+bullish_correction_ended = ta.crossover(k, d) and k < 40
+bearish_correction_ended = ta.crossunder(k, d) and k > 60
+
+// ==========================================
+// 5. PRICE ACTION CONFIRMATION
+// ==========================================
+// Avoid entering on Doji or weak candles. Ensure the body is clearly committed.
+bull_candle = close > open and (close - open) > (high - low) * 0.4
+bear_candle = close < open and (open - close) > (high - low) * 0.4
+
+// ==========================================
+// 6. BREAKOUT & PULLBACK STATE MACHINE
+// ==========================================
+var int state = 0 
+var float active_level = na
+var int bars_since_break = 0
+
+// Strict Breakout Filter (Price must close beyond level and push away)
+if ta.crossover(close, curr_golden) and close > curr_golden + (atr_val * 0.1)
+    state := 1
+    active_level := curr_golden
+    bars_since_break := 0
+
+if ta.crossunder(close, curr_golden) and close < curr_golden - (atr_val * 0.1)
+    state := -1
+    active_level := curr_golden
+    bars_since_break := 0
+
+bars_since_break += 1
+
+// Signal Triggers
+trigger_long = false
+trigger_short = false
+
+support_buffer = atr_val * zone_size
+
+// --- LONG SETUP EXECUTION ---
+if state == 1 and bars_since_break >= 3
+    // 1. Did it pull back to the golden level support zone?
+    retest_touched = low <= active_level + support_buffer
+    // 2. Are all institutional stars aligned?
+    if retest_touched and bullish_correction_ended and bull_candle and trend_bull
+        trigger_long := true
+        // Only reset state completely on execution, or let it ride. 
+        state := 0 // Complete the setup
+
+// --- SHORT SETUP EXECUTION ---
+if state == -1 and bars_since_break >= 3
+    retest_touched = high >= active_level - support_buffer
+    if retest_touched and bearish_correction_ended and bear_candle and trend_bear
+        trigger_short := true
+        state := 0
+
+// ==========================================
+// 7. VISUAL BOX DRAWING & EXECUTION
+// ==========================================
+var label last_long_lbl = na
+var label last_short_lbl = na
+
+if trigger_long
+    // Safe Stop Loss: Lowest wick of recent pullback AND explicitly below the Golden Level with a multiplied dynamic buffer
+    sl = math.min(lowest_5, active_level) - (atr_val * sl_atr_mult)   
+    tp = close + (close - sl) * rr                   
+
+    if show_labels and strategy.position_size <= 0
+        txt = "🟢 شــراء مؤكـد (PRO)\n━━━━━━━━━\nدخول : " + str.tostring(close, "#.##") + "\nوقـف : " + str.tostring(sl, "#.##") + "\nهـدف : " + str.tostring(tp, "#.##")
+        last_long_lbl := label.new(bar_index, low - atr_val*3.5, txt, color=color.new(color.blue, 30), textcolor=color.white, style=label.style_label_up, size=size.normal)
+    
+    strategy.entry("PRO Long", strategy.long)
+    strategy.exit("Exit Long", "PRO Long", stop=sl, limit=tp)
+
+if trigger_short
+    // Safe Stop Loss: Highest wick of recent pullback AND explicitly above the Golden Level with multiplied buffer
+    sl = math.max(highest_5, active_level) + (atr_val * sl_atr_mult)
+    tp = close - (sl - close) * rr
+
+    if show_labels and strategy.position_size >= 0
+        txt = "🔴 بيــع مؤكـد (PRO)\n━━━━━━━━━\nدخول : " + str.tostring(close, "#.##") + "\nوقـف : " + str.tostring(sl, "#.##") + "\nهـدف : " + str.tostring(tp, "#.##")
+        last_short_lbl := label.new(bar_index, high + atr_val*3.5, txt, color=color.new(color.maroon, 30), textcolor=color.white, style=label.style_label_down, size=size.normal)
+    
+    strategy.entry("PRO Short", strategy.short)
+    strategy.exit("Exit Short", "PRO Short", stop=sl, limit=tp)
+
+// ==========================================
+// 8. DYNAMIC TRADE SUCCESS CAPTURE 
+// ==========================================
+if strategy.closedtrades > 0
+    trade_len = strategy.closedtrades
+    last_trade_index = strategy.closedtrades.exit_bar_index(trade_len - 1)
+    
+    if bar_index == last_trade_index
+        prof = strategy.closedtrades.profit(trade_len - 1)
+        trade_id = strategy.closedtrades.entry_id(trade_len - 1)
+        
+        result_str = prof > 0 ? "\n━━━━━━━━━\n✅ صفقـة ناجحة" : "\n━━━━━━━━━\n❌ صفقـة خاسرة"
+        color_result = prof > 0 ? color.new(color.green, 20) : color.new(color.gray, 20)
+        
+        if trade_id == "PRO Long" and not na(last_long_lbl)
+            curr_txt = label.get_text(last_long_lbl)
+            if not str.contains(curr_txt, "صفقـة")
+                label.set_text(last_long_lbl, curr_txt + result_str)
+                label.set_color(last_long_lbl, color_result)
+                
+        if trade_id == "PRO Short" and not na(last_short_lbl)
+            curr_txt = label.get_text(last_short_lbl)
+            if not str.contains(curr_txt, "صفقـة")
+                label.set_text(last_short_lbl, curr_txt + result_str)
+                label.set_color(last_short_lbl, color_result)

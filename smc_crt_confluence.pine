@@ -1,0 +1,288 @@
+// ============================================================
+// SMC + CRT CONFLUENCE INDICATOR  |  Pine Script v6
+// ============================================================
+//@version=6
+indicator("SMC + CRT Confluence [v6]", overlay=true, max_boxes_count=200, max_lines_count=200, max_labels_count=200)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 1 — INPUTS
+// ═══════════════════════════════════════════════════════════
+
+i_swingLen    = input.int(10,    "Swing Length (bars)",          group="⚙️ Core Settings", minval=3, maxval=50)
+i_atrLen      = input.int(14,    "ATR Length",                   group="⚙️ Core Settings")
+i_atrMult     = input.float(0.5, "ATR Box Buffer Multiplier",    group="⚙️ Core Settings", step=0.1, minval=0.1)
+
+i_emaFast     = input.int(50,    "EMA Fast",                     group="📈 Trend Filter")
+i_emaSlow     = input.int(200,   "EMA Slow",                     group="📈 Trend Filter")
+i_showEma     = input.bool(true, "Show EMA Lines",               group="📈 Trend Filter")
+
+i_showOB      = input.bool(true, "Show Order Blocks",            group="🔷 SMC")
+i_showFVG     = input.bool(true, "Show Fair Value Gaps",         group="🔷 SMC")
+i_showBOS     = input.bool(true, "Show Break of Structure",      group="🔷 SMC")
+i_obBullCol   = input.color(color.new(color.blue,   80), "Bullish OB",  group="🔷 SMC")
+i_obBearCol   = input.color(color.new(color.red,    80), "Bearish OB",  group="🔷 SMC")
+i_fvgBullCol  = input.color(color.new(color.teal,   85), "Bullish FVG", group="🔷 SMC")
+i_fvgBearCol  = input.color(color.new(color.orange, 85), "Bearish FVG", group="🔷 SMC")
+
+i_showCRT     = input.bool(true, "Show CRT Zones",               group="🕯️ CRT")
+i_crtLen      = input.int(3,     "CRT Lookback (candles)",       group="🕯️ CRT", minval=2, maxval=10)
+
+i_showMom     = input.bool(true, "Highlight Momentum Candles",   group="💥 Momentum")
+i_momThresh   = input.float(1.5, "Momentum ATR Multiplier",      group="💥 Momentum", step=0.1, minval=0.5)
+i_momBullCol  = input.color(color.new(color.lime, 60), "Bull Momentum Color", group="💥 Momentum")
+i_momBearCol  = input.color(color.new(color.red,  60), "Bear Momentum Color", group="💥 Momentum")
+
+i_showTrend   = input.bool(true, "Show Trend Label",             group="📊 Trend Structure")
+i_showSwings  = input.bool(true, "Show Swing Labels",            group="📊 Trend Structure")
+
+i_minScore    = input.int(2,     "Minimum Score for Signal",     group="🎯 Signals", minval=1, maxval=4, tooltip="Max score is 4 (CRT, OB, BOS, Momentum)")
+i_showEntry   = input.bool(true, "Show Entry Box",               group="🎯 Signals")
+i_showTP      = input.bool(true, "Show Take-Profit Boxes",       group="🎯 Signals")
+i_showSL      = input.bool(true, "Show Stop-Loss Box",           group="🎯 Signals")
+i_tpR1        = input.float(1.5, "TP1 R:R Ratio",               group="🎯 Signals", step=0.1)
+i_tpR2        = input.float(2.5, "TP2 R:R Ratio",               group="🎯 Signals", step=0.1)
+i_tpR3        = input.float(4.0, "TP3 R:R Ratio",               group="🎯 Signals", step=0.1)
+i_boxWidth    = input.int(8,     "Signal Box Width (bars)",      group="🎯 Signals", minval=3, maxval=30)
+i_alertEntry  = input.bool(true, "Alert on Entry Signal",        group="🔔 Alerts")
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 2 — CORE CALCULATIONS
+// ═══════════════════════════════════════════════════════════
+
+atr      = ta.atr(i_atrLen)
+buf      = atr * i_atrMult
+emaFast  = ta.ema(close, i_emaFast)
+emaSlow  = ta.ema(close, i_emaSlow)
+
+swingHigh = ta.pivothigh(high, i_swingLen, i_swingLen)
+swingLow  = ta.pivotlow(low,  i_swingLen, i_swingLen)
+
+var float lastSwingHigh = na
+var float lastSwingLow  = na
+var int   lastSHBar     = na
+var int   lastSLBar     = na
+
+if not na(swingHigh)
+    lastSwingHigh := swingHigh
+    lastSHBar     := bar_index[i_swingLen]
+
+if not na(swingLow)
+    lastSwingLow := swingLow
+    lastSLBar    := bar_index[i_swingLen]
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 3 — TREND STRUCTURE
+// ═══════════════════════════════════════════════════════════
+
+var int   trendState = 0
+var float prevSH     = na
+var float prevSL     = na
+
+if not na(lastSwingHigh) and not na(lastSwingLow)
+    isHH = not na(prevSH) and lastSwingHigh > prevSH
+    isHL = not na(prevSL) and lastSwingLow  > prevSL
+    isLH = not na(prevSH) and lastSwingHigh < prevSH
+    isLL = not na(prevSL) and lastSwingLow  < prevSL
+    if isHH and isHL
+        trendState := 1
+    else if isLH and isLL
+        trendState := -1
+    else
+        trendState := 0
+
+if not na(swingHigh)
+    prevSH := swingHigh
+if not na(swingLow)
+    prevSL := swingLow
+
+emaBullish = emaFast > emaSlow
+emaBearish = emaFast < emaSlow
+trendUp    = trendState ==  1 and emaBullish
+trendDown  = trendState == -1 and emaBearish
+
+trendLabel = trendUp ? "UPTREND ▲" : trendDown ? "DOWNTREND ▼" : "NEUTRAL ◆"
+trendCol   = trendUp ? color.lime : trendDown ? color.red : color.gray
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 4 — CRT (Candle Range Theory)
+// ═══════════════════════════════════════════════════════════
+
+crtHigh      = ta.highest(high[1], i_crtLen)
+crtLow       = ta.lowest(low[1],   i_crtLen)
+crtMid       = math.avg(crtHigh, crtLow)
+crtRange     = crtHigh - crtLow
+crtBullBreak = close > crtHigh and (close - open) > crtRange * 0.5
+crtBearBreak = close < crtLow  and (open - close) > crtRange * 0.5
+crtScore     = crtBullBreak ? 1 : crtBearBreak ? -1 : 0
+
+if i_showCRT and crtBullBreak
+    line.new(bar_index - i_crtLen, crtMid, bar_index, crtMid, color=color.new(color.teal,   40), width=1, style=line.style_dotted)
+
+if i_showCRT and crtBearBreak
+    line.new(bar_index - i_crtLen, crtMid, bar_index, crtMid, color=color.new(color.orange, 40), width=1, style=line.style_dotted)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 5 — SMC: ORDER BLOCKS
+// ═══════════════════════════════════════════════════════════
+
+strongBullMove = (close - open) > atr * 1.5 and close > open
+strongBearMove = (open - close) > atr * 1.5 and open > close
+bullOB         = strongBullMove and open[1] > close[1]
+bearOB         = strongBearMove and close[1] > open[1]
+
+var box bullOBBox = na
+var box bearOBBox = na
+
+if i_showOB and bullOB
+    bullOBBox := box.new(bar_index - 1, high[1], bar_index + i_boxWidth, low[1], border_color=color.new(color.blue, 40), bgcolor=i_obBullCol, text="Bull OB", text_color=color.new(color.blue, 20), text_size=size.tiny)
+
+if i_showOB and bearOB
+    bearOBBox := box.new(bar_index - 1, high[1], bar_index + i_boxWidth, low[1], border_color=color.new(color.red,  40), bgcolor=i_obBearCol, text="Bear OB", text_color=color.new(color.red,  20), text_size=size.tiny)
+
+nearBullOB = not na(bullOBBox) and close <= box.get_top(bullOBBox)    and close >= box.get_bottom(bullOBBox)
+nearBearOB = not na(bearOBBox) and close <= box.get_top(bearOBBox)    and close >= box.get_bottom(bearOBBox)
+obScore    = nearBullOB ? 1 : nearBearOB ? -1 : 0
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 6 — SMC: FAIR VALUE GAPS
+// ═══════════════════════════════════════════════════════════
+
+bullFVG = low[0]  > high[2]
+bearFVG = high[0] < low[2]
+
+if i_showFVG and bullFVG
+    box.new(bar_index - 2, low[0], bar_index + i_boxWidth, high[2], border_color=color.new(color.teal,   50), bgcolor=i_fvgBullCol, text="FVG ↑", text_color=color.new(color.teal,   10), text_size=size.tiny)
+
+if i_showFVG and bearFVG
+    box.new(bar_index - 2, high[0], bar_index + i_boxWidth, low[2], border_color=color.new(color.orange, 50), bgcolor=i_fvgBearCol, text="FVG ↓", text_color=color.new(color.orange, 10), text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 7 — SMC: BREAK OF STRUCTURE
+// ═══════════════════════════════════════════════════════════
+
+bullBOS = not na(lastSwingHigh) and close > lastSwingHigh and close[1] <= lastSwingHigh
+bearBOS = not na(lastSwingLow)  and close < lastSwingLow  and close[1] >= lastSwingLow
+
+if i_showBOS and bullBOS
+    line.new(lastSHBar, lastSwingHigh, bar_index, lastSwingHigh, color=color.new(color.blue, 30), width=1, style=line.style_dashed)
+    label.new(bar_index, lastSwingHigh + buf, "BOS ↑", style=label.style_label_down, color=color.new(color.blue, 40), textcolor=color.white, size=size.tiny)
+
+if i_showBOS and bearBOS
+    line.new(lastSLBar, lastSwingLow, bar_index, lastSwingLow, color=color.new(color.red, 30), width=1, style=line.style_dashed)
+    label.new(bar_index, lastSwingLow - buf, "BOS ↓", style=label.style_label_up, color=color.new(color.red, 40), textcolor=color.white, size=size.tiny)
+
+bosScore = bullBOS ? 1 : bearBOS ? -1 : 0
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 8 — MOMENTUM CANDLES
+// ═══════════════════════════════════════════════════════════
+
+bodySize  = math.abs(close - open)
+isMomBull = bodySize > atr * i_momThresh and close > open and (high - close) < bodySize * 0.25
+isMomBear = bodySize > atr * i_momThresh and open > close and (close - low)  < bodySize * 0.25
+
+barcolor(i_showMom and isMomBull ? i_momBullCol : na, title="Bullish Momentum")
+barcolor(i_showMom and isMomBear ? i_momBearCol : na, title="Bearish Momentum")
+
+momScore = isMomBull ? 1 : isMomBear ? -1 : 0
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 9 — CONFLUENCE ENGINE
+// ═══════════════════════════════════════════════════════════
+
+totalScore = crtScore + obScore + bosScore + momScore
+bullSignal = totalScore >=  i_minScore and trendUp
+bearSignal = totalScore <= -i_minScore and trendDown
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 10 — ENTRY SIGNALS & EXITS (Clean & Clear)
+// ═══════════════════════════════════════════════════════════
+
+var int lastBullBar = na
+var int lastBearBar = na
+
+isNewBull = bullSignal and (na(lastBullBar) or bar_index != lastBullBar)
+isNewBear = bearSignal and (na(lastBearBar) or bar_index != lastBearBar)
+
+if isNewBull
+    lastBullBar := bar_index
+if isNewBear
+    lastBearBar := bar_index
+
+// Plotting exact entry shapes mapping precisely to the entry candle
+plotshape(i_showEntry and isNewBull, "Long Entry Arrow",  shape.triangleup,   location.belowbar, color.lime, size=size.normal)
+plotshape(i_showEntry and isNewBear, "Short Entry Arrow", shape.triangledown, location.abovebar, color.red,  size=size.normal)
+
+// Signal Boxes (floating slightly away from the candles for perfect visibility)
+if isNewBull and i_showEntry
+    entryTop  = close + buf
+    entryBot  = close - buf
+    slLevel   = not na(lastSwingLow) ? math.min(lastSwingLow - buf, close - atr) : close - atr * 2
+    riskAmt   = math.abs(entryBot - slLevel)
+    tp1       = entryTop + riskAmt * i_tpR1
+    tp2       = entryTop + riskAmt * i_tpR2
+    tp3       = entryTop + riskAmt * i_tpR3
+    
+    lblText = "🟢 LONG ENTRY\n" +
+              "Entry: " + str.tostring(entryTop, format.mintick) + "\n" +
+              "SL: "    + str.tostring(slLevel, format.mintick)  + "\n" +
+              "TP1: "   + str.tostring(tp1, format.mintick)      + "\n" +
+              "TP2: "   + str.tostring(tp2, format.mintick)      + "\n" +
+              "TP3: "   + str.tostring(tp3, format.mintick)
+              
+    label.new(bar_index, low - atr, lblText, color=color.new(color.black, 20), style=label.style_label_up, textcolor=color.lime, textalign=text.align_left, size=size.small)
+
+if isNewBear and i_showEntry
+    entryTop  = close + buf
+    entryBot  = close - buf
+    slLevel   = not na(lastSwingHigh) ? math.max(lastSwingHigh + buf, close + atr) : close + atr * 2
+    riskAmt   = math.abs(slLevel - entryTop)
+    tp1       = entryBot - riskAmt * i_tpR1
+    tp2       = entryBot - riskAmt * i_tpR2
+    tp3       = entryBot - riskAmt * i_tpR3
+    
+    lblText = "🔴 SHORT ENTRY\n" +
+              "Entry: " + str.tostring(entryBot, format.mintick) + "\n" +
+              "SL: "    + str.tostring(slLevel, format.mintick)  + "\n" +
+              "TP1: "   + str.tostring(tp1, format.mintick)      + "\n" +
+              "TP2: "   + str.tostring(tp2, format.mintick)      + "\n" +
+              "TP3: "   + str.tostring(tp3, format.mintick)
+              
+    label.new(bar_index, high + atr, lblText, color=color.new(color.black, 20), style=label.style_label_down, textcolor=color.red, textalign=text.align_left, size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 11 — SWING LABELS
+// ═══════════════════════════════════════════════════════════
+
+if i_showSwings and not na(swingHigh)
+    label.new(bar_index[i_swingLen], swingHigh + buf, "SH", style=label.style_label_down, color=color.new(color.blue, 60), textcolor=color.white, size=size.tiny)
+
+if i_showSwings and not na(swingLow)
+    label.new(bar_index[i_swingLen], swingLow  - buf, "SL", style=label.style_label_up,   color=color.new(color.red,  60), textcolor=color.white, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 12 — TREND DASHBOARD
+// ═══════════════════════════════════════════════════════════
+
+var table dash = table.new(position.top_right, 1, 1, bgcolor=color.new(color.black, 70), border_color=color.new(color.gray, 80), border_width=1, frame_color=color.new(color.gray, 80), frame_width=1)
+
+if barstate.islast and i_showTrend
+    lblText = trendLabel + "\nScore: " + str.tostring(totalScore) + "\nEMA: " + (emaBullish ? "Bullish" : emaBearish ? "Bearish" : "Flat")
+    table.cell(dash, 0, 0, lblText, text_color=trendCol, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 13 — EMA PLOTS
+// ═══════════════════════════════════════════════════════════
+
+plot(i_showEma ? emaFast : na, "EMA Fast", color=color.new(color.yellow, 20), linewidth=1)
+plot(i_showEma ? emaSlow : na, "EMA Slow", color=color.new(color.white,  40), linewidth=2)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 14 — ALERTS
+// ═══════════════════════════════════════════════════════════
+
+if i_alertEntry and bullSignal
+    alert("🟢 LONG ENTRY — Score: " + str.tostring(totalScore) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)
+
+if i_alertEntry and bearSignal
+    alert("🔴 SHORT ENTRY — Score: " + str.tostring(totalScore) + " | " + syminfo.ticker, alert.freq_once_per_bar_close)

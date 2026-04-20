@@ -1,0 +1,15 @@
+pandas
+numpy
+ccxt
+pydantic
+fastapi
+uvicorn
+python-dotenv
+MetaTrader5
+schedule
+matplotlib
+requests
+websockets
+alpaca-trade-api
+scikit-learn
+joblib

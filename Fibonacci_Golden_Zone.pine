@@ -1,0 +1,190 @@
+//@version=6
+strategy("Fibonacci Golden Zone [TradeBot]", overlay=true, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=1, currency=currency.USD, process_orders_on_close=true)
+
+// --- Inputs ---
+grp_strategy = "Strategy Settings"
+sessionTime = input.session("0800-1700", "Trading Session", group=grp_strategy, tooltip="Session for taking trades (Exchange Time)")
+riskReward = input.string("1:2", "Risk : Reward", options=["1:2", "1:3"], group=grp_strategy)
+riskPerTrade = input.float(1.0, "Risk Per Trade (%)", minval=0.1, maxval=100, step=0.1, group=grp_strategy)
+
+grp_filters = "Filters (For 1m/5m)"
+useEmaFilter = input.bool(true, "Use EMA Trend Filter", group=grp_filters, tooltip="Only take Longs above EMA / Shorts below EMA")
+emaLength = input.int(200, "EMA Length", minval=1, group=grp_filters)
+
+grp_fib = "Fibonacci Settings"
+length = input.int(21, "Pivot Lookback Length", minval=2, group=grp_fib, tooltip="Higher values (e.g. 21-50) recommended for 1m/5m to filter noise")
+showFibs = input.bool(true, "Show Fibonacci Levels", group=grp_fib)
+
+// --- Constants ---
+FIB_0 = 0.0
+FIB_1 = 1.0
+FIB_05 = 0.5
+FIB_0618 = 0.618
+
+// --- Indicators ---
+emaValue = ta.ema(close, emaLength)
+plot(useEmaFilter ? emaValue : na, "EMA Trend", color=color.blue, linewidth=2)
+
+// --- Session Check ---
+isInSession = not na(time(timeframe.period, sessionTime + ":1234567"))
+
+// --- Pivot Detection & Dynamic State ---
+ph = ta.pivothigh(length, length) // Confirmed high
+pl = ta.pivotlow(length, length)  // Confirmed low
+
+// State tracking
+var float anchorPrice = na // The starting point of the move (100% level)
+var float extremePrice = na // The extending point of the move (0% level)
+var string trendState = "NONE" // "UP_LEG" (Low confirmed, making Highs) or "DOWN_LEG" (High confirmed, making Lows)
+
+// Detect New Swings (Anchors)
+if not na(pl) // Pivot Low Found -> Start of Up Move?
+    // Only switch if we were not already in a better Up Move? 
+    // Or normally, a Pivot Low marks the bottom of a correction, starting a new Up Leg. -- OR --
+    // A Pivot Low marks the bottom of the Trend.
+    // Let's assume Pivot Low = Anchor for Long Setup.
+    anchorPrice := pl
+    extremePrice := high // Reset extreme to current high (since pivot is lagged, high of this bar might be it)
+    trendState := "UP_LEG"
+
+if not na(ph) // Pivot High Found -> Start of Down Move?
+    anchorPrice := ph
+    extremePrice := low
+    trendState := "DOWN_LEG"
+
+// Dynamic Updates (Extend Lines)
+if trendState == "UP_LEG"
+    if high > extremePrice
+        extremePrice := high // New High, Pull Fibs up
+    
+    // Invalidation: If price drops below Anchor (Low), structure broken
+    if close < anchorPrice
+        trendState := "NONE"
+
+if trendState == "DOWN_LEG"
+    if low < extremePrice
+        extremePrice := low // New Low, Push Fibs down
+        
+    if close > anchorPrice
+        trendState := "NONE"
+
+// --- Fibonacci Calculations ---
+// Up Leg: Anchor (Low, 1.0), Extreme (High, 0.0)
+// Down Leg: Anchor (High, 1.0), Extreme (Low, 0.0)
+
+var float fib_0 = na
+var float fib_1 = na
+var float fib_05 = na
+var float fib_0618 = na
+var float stop_level = na
+var bool tradeSetupFound = false
+var string direction = "NONE"
+
+if trendState == "UP_LEG"
+    fib_0 := extremePrice      // Top (0%)
+    fib_1 := anchorPrice       // Bottom (100%)
+    diff = fib_0 - fib_1
+    // Retracements
+    fib_05 := fib_0 - diff * 0.5
+    fib_0618 := fib_0 - diff * 0.618
+    stop_level := fib_1
+    direction := "LONG"
+    tradeSetupFound := true
+
+if trendState == "DOWN_LEG"
+    fib_0 := extremePrice      // Bottom (0%)
+    fib_1 := anchorPrice       // Top (100%)
+    diff = fib_1 - fib_0 // Pos
+    // Retracements (Price moving Up)
+    fib_05 := fib_0 + diff * 0.5
+    fib_0618 := fib_0 + diff * 0.618
+    stop_level := fib_1
+    direction := "SHORT"
+    tradeSetupFound := true
+    
+if trendState == "NONE"
+    tradeSetupFound := false
+
+// --- Entry Logic ---
+longCondition = false
+shortCondition = false
+
+// Trend Filter Check
+trendOkLong = useEmaFilter ? close > emaValue : true
+trendOkShort = useEmaFilter ? close < emaValue : true
+
+if tradeSetupFound and isInSession
+    if direction == "LONG" and trendOkLong
+        // Price dropped into zone [0.5, 0.618]
+        // Check if Low touched zone and High is above (bar actually interacted)
+        // Strictly: Close inside/above? 
+        // Logic: Touch and go.
+        if low <= fib_05 and high >= fib_0618
+            if low > fib_1 // Stop not hit
+                longCondition := true
+    
+    if direction == "SHORT" and trendOkShort
+        // Price rose into zone
+        if high >= fib_05 and low <= fib_0618
+            if high < fib_1
+                shortCondition := true
+
+// --- Risk Management ---
+getTP(entry, stop, rr) =>
+    risk = math.abs(entry - stop)
+    ratio = rr == "1:2" ? 2.0 : 3.0
+    direction == "LONG" ? entry + (risk * ratio) : entry - (risk * ratio)
+
+if longCondition and strategy.position_size == 0
+    entryPrice = close
+    sl = stop_level
+    tp = getTP(entryPrice, sl, riskReward)
+    riskAmt = strategy.equity * (riskPerTrade / 100)
+    qty = riskAmt / math.abs(entryPrice - sl)
+    strategy.entry("Long", strategy.long, qty=qty)
+    strategy.exit("Exit Long", "Long", stop=sl, limit=tp, comment_loss="L", comment_profit="W")
+
+if shortCondition and strategy.position_size == 0
+    entryPrice = close
+    sl = stop_level
+    tp = getTP(entryPrice, sl, riskReward)
+    riskAmt = strategy.equity * (riskPerTrade / 100)
+    qty = riskAmt / math.abs(entryPrice - sl)
+    strategy.entry("Short", strategy.short, qty=qty)
+    strategy.exit("Exit Short", "Short", stop=sl, limit=tp, comment_loss="L", comment_profit="W")
+
+// --- Visualization (Same) ---
+plotshape(ph, style=shape.triangledown, location=location.abovebar, color=color.red, offset=-length, title="Swing High")
+plotshape(pl, style=shape.triangleup, location=location.belowbar, color=color.green, offset=-length, title="Swing Low")
+
+var line l_0 = na
+var line l_1 = na
+var line l_05 = na
+var line l_0618 = na
+
+if showFibs and tradeSetupFound
+    line.delete(l_0)
+    line.delete(l_1)
+    line.delete(l_05)
+    line.delete(l_0618)
+    
+    l_0 := line.new(bar_index-10, fib_0, bar_index+10, fib_0, color=color.gray, style=line.style_dotted)
+    l_1 := line.new(bar_index-10, fib_1, bar_index+10, fib_1, color=color.red, style=line.style_solid) 
+    l_05 := line.new(bar_index-10, fib_05, bar_index+10, fib_05, color=color.yellow, width=2)
+    l_0618 := line.new(bar_index-10, fib_0618, bar_index+10, fib_0618, color=color.orange, width=2)
+
+    // Labels
+    var label lbl_0 = na
+    var label lbl_1 = na
+    var label lbl_05 = na
+    var label lbl_0618 = na
+
+    label.delete(lbl_0)
+    label.delete(lbl_1)
+    label.delete(lbl_05)
+    label.delete(lbl_0618)
+
+    lbl_0 := label.new(bar_index + 10, fib_0, "0.0", color=color.gray, style=label.style_label_left, textcolor=color.white, size=size.small)
+    lbl_1 := label.new(bar_index + 10, fib_1, "1.0", color=color.red, style=label.style_label_left, textcolor=color.white, size=size.small)
+    lbl_05 := label.new(bar_index + 10, fib_05, "0.5", color=color.yellow, style=label.style_label_left, textcolor=color.black, size=size.small)
+    lbl_0618 := label.new(bar_index + 10, fib_0618, "0.618", color=color.orange, style=label.style_label_left, textcolor=color.black, size=size.small)

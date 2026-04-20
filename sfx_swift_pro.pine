@@ -1,0 +1,109 @@
+//@version=6
+strategy("Swift-X Pro Algorithm (SFX Logic)", overlay=true, initial_capital=1000, max_bars_back=500)
+
+// --- 1. SETTINGS & INPUTS ---
+group_algo   = "Algorithm Settings"
+group_risk   = "Risk Management"
+group_visual = "Visuals"
+
+// Swift/SFX Core Parameters
+lenVol       = input.int(20, "Volume Z-Score Length", group=group_algo)
+volThreshold = input.float(1.5, "Volume Force Threshold", step=0.1, group=group_algo, tooltip="Minimum Z-Score to confirm a breakout. Higher = stricter.")
+lenTrend     = input.int(50, "Trend Baseline Length", group=group_algo)
+multDev      = input.float(2.0, "Volatility Band Multiplier", step=0.1, group=group_algo)
+
+// Risk Management
+useAtrSL     = input.bool(true, "Use ATR Stop Loss", group=group_risk)
+atrLen       = input.int(14, "ATR Length", group=group_risk)
+atrMult      = input.float(2.0, "ATR SL Multiplier", step=0.1, group=group_risk)
+tpRatio      = input.float(1.5, "Take Profit Ratio (Risk:Reward)", step=0.1, group=group_risk)
+
+// --- 2. CALCULATIONS ---
+
+// A. Volume Force (Z-Score)
+// Measures how unusual the current volume is compared to the average.
+// Z = (Vol - AvgVol) / StdDevVol
+volAvg = ta.sma(volume, lenVol)
+volStd = ta.stdev(volume, lenVol)
+volZ   = (volume - volAvg) / volStd
+// We use a smoothed Z-score to reduce noise
+volForce = ta.ema(volZ, 3) 
+
+// B. Fair Value & Volatility Bands
+// Uses a Hull MA for a responsive baseline, similar to "Swift" adaptive trends
+baseline = ta.hma(close, lenTrend)
+dev      = ta.stdev(close, lenTrend) * multDev
+upperBand = baseline + dev
+lowerBand = baseline - dev
+
+// C. Momentum/Trend Consensus
+// Simple consensus: Price > Baseline AND RSI > 50 (or similar momentum check)
+momVal = ta.rsi(close, 14)
+bullMom = momVal > 50
+bearMom = momVal < 50
+
+// --- 3. SIGNAL GENERATION ---
+
+// Buy Signal:
+// 1. Price closes ABOVE Upper Band (Breakout)
+// 2. Volume Force is strong (> Threshold) OR Volume is just significantly higher than avg
+// 3. Momentum is bullish
+bool buyBreakout = ta.crossover(close, upperBand)
+bool volConfirm  = volForce > volThreshold
+bool buySignal   = buyBreakout and volConfirm and bullMom
+
+// Sell Signal:
+// 1. Price closes BELOW Lower Band (Breakout)
+// 2. Volume Force is strong
+// 3. Momentum is bearish
+bool sellBreakout = ta.crossunder(close, lowerBand)
+bool sellSignal   = sellBreakout and volConfirm and bearMom
+
+// --- 4. EXECUTION & RISK ---
+
+// ATR for Stop Loss calculation
+atrVal = ta.atr(atrLen)
+
+if buySignal and strategy.position_size == 0
+    float slPrice = useAtrSL ? close - (atrVal * atrMult) : lowerBand
+    float risk    = close - slPrice
+    float tpPrice = close + (risk * tpRatio)
+    
+    strategy.entry("Swift Buy", strategy.long)
+    strategy.exit("Exit Buy", "Swift Buy", stop=slPrice, limit=tpPrice)
+    
+    // Label
+    label.new(bar_index, low - atrVal, 
+             text="⚡ SWIFT BUY\nPrice: " + str.tostring(close, "#.##") + "\nTP: " + str.tostring(tpPrice, "#.##"), 
+             color=color.green, style=label.style_label_up, textcolor=color.white, size=size.small)
+
+if sellSignal and strategy.position_size == 0
+    float slPrice = useAtrSL ? close + (atrVal * atrMult) : upperBand
+    float risk    = slPrice - close
+    float tpPrice = close - (risk * tpRatio)
+    
+    strategy.entry("Swift Sell", strategy.short)
+    strategy.exit("Exit Sell", "Swift Sell", stop=slPrice, limit=tpPrice)
+    
+    // Label
+    label.new(bar_index, high + atrVal, 
+             text="⚡ SWIFT SELL\nPrice: " + str.tostring(close, "#.##") + "\nTP: " + str.tostring(tpPrice, "#.##"), 
+             color=color.red, style=label.style_label_down, textcolor=color.white, size=size.small)
+
+// --- 5. VISUALS ---
+
+// Plot Bands
+plot(upperBand, "Upper Band", color=color.new(color.red, 50))
+plot(lowerBand, "Lower Band", color=color.new(color.green, 50))
+plot(baseline, "Baseline", color=color.gray)
+
+// Color Candles based on Trend
+barcolor(close > baseline ? color.new(color.green, 50) : color.new(color.red, 50))
+
+// Background for Volume Force Spike (Optional)
+bgcolor(volConfirm ? color.new(color.yellow, 90) : na, title="Volume Spike")
+
+// --- Win/Loss Marker ---
+if strategy.closedtrades > strategy.closedtrades[1]
+    bool isWin = strategy.closedtrades.profit(strategy.closedtrades - 1) > 0
+    label.new(bar_index, high + atrVal*2, isWin ? "✅" : "❌", style=label.style_none)

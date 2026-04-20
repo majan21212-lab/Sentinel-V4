@@ -1,0 +1,108 @@
+import os
+import json
+from models import RiskConfig, AccountStatus, Signal
+
+class RiskEngine:
+    def __init__(self, config: RiskConfig = RiskConfig()):
+        self.config = config
+        self.load_config()
+
+    def load_config(self):
+        """Loads risk settings from a persistent JSON file if it exists."""
+        config_path = "risk_settings.json"
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, "r") as f:
+                    data = json.load(f)
+                    self.config = RiskConfig(**data)
+        except Exception as e:
+            print(f"Error loading risk config: {e}")
+
+        # Overlay Profile-specific overrides
+        profile = self.config.active_profile
+        if profile == "CONSERVATIVE":
+            self.config.max_open_positions = 1
+            self.config.max_daily_loss_pct = 1.0
+        elif profile == "OPTIMAL":
+            self.config.max_open_positions = 3
+            self.config.max_daily_loss_pct = 3.0
+        elif profile == "AGGRESSIVE":
+            self.config.max_open_positions = 10
+            self.config.max_daily_loss_pct = 10.0
+
+        # 1. Check Max Open Positions
+        if account.open_positions >= self.config.max_open_positions:
+            return False, f"Max {profile} open positions reached ({self.config.max_open_positions})."
+
+        # 1. Check Daily Drawdown (Passive Stop)
+        # If daily pnl is below the max allowed loss %, stop taking NEW trades
+        max_loss_usd = account.equity * (self.config.max_daily_loss_pct / 100)
+        if account.daily_pnl < -max_loss_usd and max_loss_usd > 0:
+            return False, f"Passive Stop: Daily loss limit reached (${max_loss_usd:.2f})."
+
+        # 3. Check Minimum Order Value
+        # (Assuming 'entry' * 'qty' is the face value)
+        order_value = signal.entry * signal.qty
+        if order_value < self.config.min_order_value_usd:
+            return False, f"Order value ${order_value:.2f} too low (Min ${self.config.min_order_value_usd})."
+
+        # 4. Correlation Risk Check
+        correlation_groups = [
+            {"BTC/USDT", "ETH/USDT", "SOL/USDT"},
+            {"XAUUSD", "EURUSD"}
+        ]
+        
+        for group in correlation_groups:
+            if signal.symbol in group:
+                active_correlated = group.intersection(set(account.active_symbols))
+                # Block if we try to open a new correlated asset
+                if active_correlated and signal.symbol not in active_correlated:
+                    return False, f"Correlation Risk: Highly correlated asset(s) {list(active_correlated)} already open."
+
+        return True, "Risk validation passed."
+
+    def calculate_position_size(self, symbol: str, account_equity: float, entry: float, stop_loss: float, score: float = 0.0) -> float:
+        """
+        Calculates qty based on asset-specific % risk, SL distance, and optional AI scaling.
+        """
+        # 1. Base Risk Calculation
+        risk_pct = self.config.risk_per_asset.get(symbol, self.config.risk_per_asset.get("DEFAULT", 1.0))
+        
+    def _calculate_multiplier(self, score: float) -> float:
+        """Calculates risk multiplier based on score (70-100)."""
+        if score <= 0: return 1.0
+        min_s, max_s = 70.0, 100.0
+        clipped_score = max(min_s, min(max_s, score))
+        ratio = (clipped_score - min_s) / (max_s - min_s)
+        return self.config.min_multiplier + (self.config.max_multiplier - self.config.min_multiplier) * ratio
+
+    def calculate_position_size(self, symbol: str, account_equity: float, entry: float, stop_loss: float, score: float = 0.0) -> float:
+        """
+        Calculates qty based on asset-specific % risk, SL distance, and optional AI scaling.
+        """
+        # 1. Base Risk Calculation
+        risk_pct = self.config.risk_per_asset.get(symbol, self.config.risk_per_asset.get("DEFAULT", 1.0))
+        
+        # Profile Multiplier
+        profile = self.config.active_profile
+        if profile == "CONSERVATIVE":
+            risk_pct *= 0.5
+        elif profile == "AGGRESSIVE":
+            risk_pct *= 2.0
+        
+        # 2. Dynamic Scaling based on AI Confidence
+        if symbol in self.config.ai_scaling_symbols and score > 0:
+            multiplier = self._calculate_multiplier(score)
+            risk_pct *= multiplier
+            print(f"💎 AI Profile ({profile}) Auto-Sizing: {symbol} score={score} | Multiplier={multiplier:.2f}x | Final Risk={risk_pct:.2f}%")
+        
+        risk_amt = account_equity * (risk_pct / 100)
+        risk_per_unit = abs(entry - stop_loss)
+        
+        if risk_per_unit == 0:
+            return 0.01
+            
+        qty = risk_amt / risk_per_unit
+        
+        # Adjust for typical lot increments
+        return round(qty, 2)

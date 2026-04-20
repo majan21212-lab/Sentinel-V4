@@ -1,0 +1,14 @@
+# Set default behavior to handle line endings automatically.
+* text=auto
+
+# Explicitly declare text files you want to always be LF.
+*.swift text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.swift.txt text eol=lf
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.ipa binary

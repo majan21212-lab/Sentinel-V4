@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel V4 | Advanced Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    <div class="container">
+        <header>
+            <h1>SENTINEL <span>V4</span></h1>
+            <div id="connection-status" class="badge">DISCONNECTED</div>
+        </header>
+
+        <section class="grid">
+            <div class="card glass">
+                <h3>Market Overview</h3>
+                <div id="market-list" class="data-list">
+                    <!-- Dynamic symbols here -->
+                </div>
+            </div>
+
+            <div class="card glass">
+                <h3>Mood Index</h3>
+                <div id="sentiment" class="sentiment-gauge">
+                    <span id="sentiment-label">NEUTRAL</span>
+                    <div class="gauge-bar"><div id="gauge-fill" style="width: 50%"></div></div>
+                </div>
+            </div>
+
+            <div class="card glass wide">
+                <h3>Signal Feed</h3>
+                <div id="signal-feed" class="feed">
+                    <!-- Dynamic signals here -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${location.host}/ws`);
+        const statusBadge = document.getElementById('connection-status');
+
+        ws.onopen = () => {
+            statusBadge.innerText = 'ONLINE';
+            statusBadge.classList.add('online');
+        };
+
+        ws.onclose = () => {
+            statusBadge.innerText = 'OFFLINE';
+            statusBadge.classList.remove('online');
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleUpdate(data);
+        };
+
+        function handleUpdate(data) {
+            if (data.type === 'market_update') {
+                updateMarket(data);
+            } else if (data.type === 'signal') {
+                addSignal(data);
+            } else if (data.type === 'sentiment') {
+                updateSentiment(data);
+            }
+        }
+
+        function updateMarket(data) {
+            const list = document.getElementById('market-list');
+            let el = document.getElementById(`sym-${data.symbol}`);
+            if (!el) {
+                el = document.createElement('div');
+                el.id = `sym-${data.symbol}`;
+                el.className = 'market-item';
+                list.appendChild(el);
+            }
+            el.innerHTML = `
+                <span class="symbol">${data.symbol}</span>
+                <span class="price">${data.price.toFixed(5)}</span>
+                <span class="score ${data.score > 70 ? 'bull' : ''}">${data.score}%</span>
+            `;
+        }
+
+        function updateSentiment(data) {
+            document.getElementById('sentiment-label').innerText = data.label;
+            const fill = document.getElementById('gauge-fill');
+            const percent = ((data.score + 1) / 2) * 100;
+            fill.style.width = `${percent}%`;
+            fill.style.background = data.score > 0 ? '#00ffa3' : '#ff3131';
+        }
+
+        function addSignal(data) {
+            const feed = document.getElementById('signal-feed');
+            const item = document.createElement('div');
+            item.className = `signal-item ${data.direction.toLowerCase()}`;
+            item.innerHTML = `
+                <span class="time">${new Date().toLocaleTimeString()}</span>
+                <span class="desc"><strong>${data.direction}</strong> @ ${data.entry.toFixed(5)}</span>
+                <span class="rationale">${data.rationale || ''}</span>
+            `;
+            feed.prepend(item);
+        }
+    </script>
+</body>
+</html>

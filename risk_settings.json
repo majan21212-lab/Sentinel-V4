@@ -1,0 +1,13 @@
+{
+    "max_open_positions": 3,
+    "max_daily_loss_pct": 5.0,
+    "min_order_value_usd": 10.0,
+    "risk_per_asset": {
+        "XAUUSDm": 1.0,
+        "BTCUSDm": 1.0,
+        "DEFAULT": 0.5
+    },
+    "ai_scaling_symbols": ["XAUUSDm", "BTCUSDm"],
+    "min_multiplier": 0.1,
+    "max_multiplier": 2.0
+}

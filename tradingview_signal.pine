@@ -1,0 +1,34 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradeBot
+
+//@version=5
+indicator("N8N Signal Boilerplate", overlay=true)
+
+// --- Inputs ---
+var string SECRET_KEY = input.password("YOUR_SECRET", "Webhook Secret Key")
+var float RISK_PERCENT = input.float(1.0, "Risk % per Trade", minval=0.1, maxval=10.0)
+
+// --- Signal Logic (Placeholder) ---
+// Replace this with your actual strategy conditions
+longCondition = ta.crossover(ta.ema(close, 9), ta.ema(close, 21))
+shortCondition = ta.crossunder(ta.ema(close, 9), ta.ema(close, 21))
+
+// --- SL/TP Calculation ---
+float atr = ta.atr(14)
+float sl_long = close - (atr * 2)
+float tp_long = close + (atr * 3)
+float sl_short = close + (atr * 2)
+float tp_short = close - (atr * 3)
+
+// --- Alert Construction ---
+// This JSON matches the N8N parsing logic
+string alert_json = '{"secret": "' + SECRET_KEY + '", "symbol": "' + syminfo.ticker + '", "side": "{{side}}", "entry": ' + str.tostring(close) + ', "sl": ' + str.tostring(sl_long) + ', "tp": ' + str.tostring(tp_long) + ', "risk": ' + str.tostring(RISK_PERCENT) + ', "id": "' + str.tostring(timenow) + '"}'
+
+if longCondition
+    alert(str.replace(alert_json, "{{side}}", "buy"), alert.freq_once_per_bar_close)
+
+if shortCondition
+    alert(str.replace(alert_json, "{{side}}", "sell"), alert.freq_once_per_bar_close)
+
+plotshape(longCondition, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+plotshape(shortCondition, style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small)

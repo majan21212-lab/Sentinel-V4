@@ -1,0 +1,404 @@
+//@version=6
+strategy("God-Mode Golden Assimilator 🎯", shorttitle="GodMode Golden", overlay=true, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=5, max_labels_count=500, max_boxes_count=500, max_lines_count=500, margin_long=100, margin_short=100)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 1 — UNIFIED CORE INPUTS 
+// ═══════════════════════════════════════════════════════════
+grp_levels = "🥇 Golden Wave Engine (The Trigger)"
+golden_step = input.float(50.0, "Golden Number Step", group=grp_levels, tooltip="Set to 50 for Gold. 0.01 for Forex.")
+zone_size = input.float(0.5, "Retest Zone ATR Multiplier", group=grp_levels, tooltip="Distance from Golden level to trigger setup")
+
+grp_score = "🎯 The 16-Factor God-Mode (The Validator)"
+i_reqScore   = input.int(10, "Minimum Confluence Score (1-16)", minval=1, maxval=16, step=1, group=grp_score)
+
+grp_alpha = "⚙️ AlphaSignal Subsystem"
+ema_fast_len = input.int(9,         "Fast EMA",  group=grp_alpha)
+ema_slow_len = input.int(21,        "Slow EMA",  group=grp_alpha)
+ema_src      = input.source(close,  "EMA Source",group=grp_alpha)
+hma_len      = input.int(16,        "HMA Length",group=grp_alpha)
+hma_src      = input.source(close,  "HMA Source",group=grp_alpha)
+bb_len       = input.int(20,       "BB Length",      group=grp_alpha)
+bb_mult      = input.float(2.0,    "BB Std Dev Mut", group=grp_alpha)
+bb_src       = input.source(close, "BB Source",      group=grp_alpha)
+pp_res       = input.timeframe("D",      "Pivot Res", group=grp_alpha)
+pp_type      = input.string("Classical", "Pivot Type", options=["Classical","Fibonacci","Woodie","Camarilla"], group=grp_alpha)
+pp_levels    = input.int(2, "Levels Above/Below (1-3)", group=grp_alpha)
+
+grp_god = "⚡ God-Mode Subsystem"
+i_orbSess    = input.string("New York (0930-1000)", "ORB Session", options=["New York (0930-1000)", "London (0800-0830)", "Asian (2000-2030)", "Disabled/Crypto"], group=grp_god)
+i_tf1        = input.timeframe("240", "HTF 1 (Trend)",  group=grp_god)
+i_tf2        = input.timeframe("60",  "HTF 2 (Trend)",group=grp_god)
+i_noRepaint  = input.bool(true, "No-Repaint (Use Closed HTF)",group=grp_god)
+i_emaLen     = input.int(200,   "God-Mode HTF EMA Length",    group=grp_god)
+i_hullLen    = input.int(25,    "God-Mode Baseline Length",   group=grp_god)
+i_ignVol     = input.bool(false, "Ignore Volume (Crypto/FX)", group=grp_god)
+i_volLen     = input.int(20,    "Volume Z-Score Length",       group=grp_god)
+i_volTh      = input.float(0.8, "Volume Z-Score Threshold",    group=grp_god, step=0.1)
+i_tmoLen     = input.int(7,     "TMO Length",                  group=grp_god)
+i_swing      = input.int(5,     "Swing Pivot Structure Length", group=grp_god, minval=3)
+
+grp_fib   = "📐 God-Mode Fib & Liquidity"
+i_fibLow  = input.float(0.382, "Fib Low Level",             group=grp_fib, step=0.01)
+i_fibHigh = input.float(0.618, "Fib High Level",            group=grp_fib, step=0.01)
+i_eqLen   = input.int(3,      "Equal H/L Tolerance (bars)", group=grp_fib, minval=2)
+i_eqTol   = input.float(0.1,  "Equal H/L ATR Tolerance",    group=grp_fib, step=0.05)
+i_sweepWin= input.int(10,     "Sweep Window (bars)",        group=grp_fib, minval=3)
+
+grp_risk = "⚖️ Risk & Execution"
+i_atrLen  = input.int(14,    "ATR Length",                  group=grp_risk)
+sl_mult   = input.float(2.0, "Stop Loss ATR Multiplier",    group=grp_risk, step=0.1)
+tp1_mult  = input.float(2.0, "TP Target R:R",  group=grp_risk, step=0.1)
+
+grp_ui = "🎨 Visuals"
+i_boxDist = input.int(2,     "Box Gap (bars)",              group=grp_ui, minval=1)
+i_boxLen  = input.int(15,    "Box Width (bars)",            group=grp_ui, minval=5)
+i_showD   = input.bool(true, "Show Master Dashboards",      group=grp_ui)
+show_overlays = input.bool(false, "Show Overlays (Clean Chart Mode)", group=grp_ui, tooltip="Turn on if you want to see EMAs, VWAP, and Golden Levels directly on chart.")
+
+// ==========================================
+// ▶ SECTION 2 — SHARED INDICATORS & PSYCHO LEVELS
+// ==========================================
+atr_val_14 = ta.atr(14)
+atr_val = ta.atr(i_atrLen)
+lowest_5 = ta.lowest(low, 5)
+highest_5 = ta.highest(high, 5)
+
+calc_closest_level(p) => math.round(p / golden_step) * golden_step
+curr_golden = calc_closest_level(close)
+
+plot(show_overlays ? curr_golden : na, color=color.new(color.yellow, 40), style=plot.style_stepline, linewidth=2, title="Active Golden Axis")
+
+vwap_val = ta.vwap(hlc3)
+var float vwap_sum  = 0.0
+var float vwap_sum2 = 0.0
+var float vwap_vol  = 0.0
+
+if ta.change(time("D")) != 0 or barstate.isfirst
+    vwap_sum  := 0.0
+    vwap_sum2 := 0.0
+    vwap_vol  := 0.0
+
+vwap_sum  += hlc3 * volume
+vwap_vol  += volume
+vwap_sum2 += hlc3 * hlc3 * volume
+
+vwap_avg    = vwap_sum / vwap_vol
+vwap_var    = (vwap_sum2 / vwap_vol) - vwap_avg * vwap_avg
+vwap_sd     = math.sqrt(math.max(vwap_var, 0.0))
+vwap_upper1 = vwap_val + vwap_sd
+vwap_lower1 = vwap_val - vwap_sd
+
+// ==========================================
+// ▶ SECTION 3 — ALPHASIGNAL ENGINE (Factors 13-16)
+// ==========================================
+ema_fast = ta.ema(ema_src, ema_fast_len)
+ema_slow = ta.ema(ema_src, ema_slow_len)
+
+[bb_mid, bb_upper, bb_lower] = ta.bb(bb_src, bb_len, bb_mult)
+bb_width = bb_upper - bb_lower
+
+hma_half  = ta.wma(hma_src, math.floor(hma_len / 2))
+hma_full  = ta.wma(hma_src, hma_len)
+hma_raw   = 2.0 * hma_half - hma_full
+hma_val   = ta.wma(hma_raw, math.floor(math.sqrt(float(hma_len))))
+hma_slope = hma_val - hma_val[2]
+
+pp_high  = request.security(syminfo.tickerid, pp_res, high[1],  lookahead=barmerge.lookahead_on)
+pp_low   = request.security(syminfo.tickerid, pp_res, low[1],   lookahead=barmerge.lookahead_on)
+pp_close = request.security(syminfo.tickerid, pp_res, close[1], lookahead=barmerge.lookahead_on)
+
+pp_P  = (pp_high + pp_low + pp_close) / 3.0
+pp_R1 = pp_type == "Classical" ? 2.0 * pp_P - pp_low : pp_type == "Fibonacci" ? pp_P + 0.382 * (pp_high - pp_low) : pp_type == "Woodie" ? (pp_high + pp_low + 2.0 * pp_close) / 4.0 + (pp_high - pp_low) : pp_P + (pp_high - pp_low) * 1.0828
+pp_S1 = pp_type == "Classical" ? 2.0 * pp_P - pp_high : pp_type == "Fibonacci" ? pp_P - 0.382 * (pp_high - pp_low) : pp_type == "Woodie" ? (pp_high + pp_low + 2.0 * pp_close) / 4.0 - (pp_high - pp_low) : pp_P - (pp_high - pp_low) * 1.0828
+pp_R2 = pp_type == "Classical" ? pp_P + (pp_high - pp_low) : pp_type == "Fibonacci" ? pp_P + 0.618 * (pp_high - pp_low) : pp_type == "Woodie" ? pp_R1 + (pp_high - pp_low) : pp_P + (pp_high - pp_low) * 1.1375
+pp_S2 = pp_type == "Classical" ? pp_P - (pp_high - pp_low) : pp_type == "Fibonacci" ? pp_P - 0.618 * (pp_high - pp_low) : pp_type == "Woodie" ? pp_S1 - (pp_high - pp_low) : pp_P - (pp_high - pp_low) * 1.1375
+
+ema_bull_align   = ema_fast > ema_slow
+ema_bear_align   = ema_fast < ema_slow
+bb_squeezed      = bb_width < 2.0 * atr_val
+hma_bull         = hma_slope > 0.0
+hma_bear         = hma_slope < 0.0
+pivot_near_any   = math.abs(close - pp_P) < atr_val * 0.5 or math.abs(close - pp_R1) < atr_val * 0.5 or math.abs(close - pp_S1) < atr_val * 0.5 or math.abs(close - pp_R2) < atr_val * 0.5 or math.abs(close - pp_S2) < atr_val * 0.5
+
+// ==========================================
+// ▶ SECTION 4 — GOD-MODE ENGINE (Factors 1-12)
+// ==========================================
+baseline = ta.hma(close, i_hullLen)
+
+f_get_trend(_tf) =>
+    _bull = close > ta.ema(close, i_emaLen)
+    _bear = close < ta.ema(close, i_emaLen)
+    _resBull = i_noRepaint ? request.security(syminfo.tickerid, _tf, _bull[1], lookahead=barmerge.lookahead_on) : request.security(syminfo.tickerid, _tf, _bull)
+    _resBear = i_noRepaint ? request.security(syminfo.tickerid, _tf, _bear[1], lookahead=barmerge.lookahead_on) : request.security(syminfo.tickerid, _tf, _bear)
+    [_resBull, _resBear]
+
+[tf1_bull, tf1_bear] = f_get_trend(i_tf1)
+[tf2_bull, tf2_bear] = f_get_trend(i_tf2)
+mtfBull = tf1_bull and tf2_bull
+mtfBear = tf1_bear and tf2_bear
+
+bullHull = close > baseline
+bearHull = close < baseline
+
+volAvg   = ta.sma(volume, i_volLen)
+volStd   = ta.stdev(volume, i_volLen)
+volZ     = volStd == 0 ? 0.0 : (volume - volAvg) / volStd
+volSpike = ta.ema(volZ, 3) > i_volTh
+bullVol = i_ignVol ? true : volSpike
+bearVol = i_ignVol ? true : volSpike
+
+osc      = ta.mom(ta.sma(ta.sma(close, i_tmoLen), i_tmoLen), i_tmoLen)
+bullMom  = ta.change(osc) > 0
+bearMom  = ta.change(osc) < 0
+
+ph = ta.pivothigh(high, i_swing, i_swing)
+pl = ta.pivotlow(low,   i_swing, i_swing)
+var float lastSH = na
+var float lastSL = na
+if not na(ph)
+    lastSH := ph
+if not na(pl)
+    lastSL := pl
+
+eqTolPts = atr_val * i_eqTol
+prevHighN = ta.highest(high[1], i_eqLen)
+prevLowN  = ta.lowest(low[1],   i_eqLen)
+eqHighSweep  = math.abs(high[1] - prevHighN[1]) <= eqTolPts and high > prevHighN[1] and close < prevHighN[1]
+eqLowSweep   = math.abs(low[1]  - prevLowN[1])  <= eqTolPts and low  < prevLowN[1]  and close > prevLowN[1]
+swingHighSweep = not na(lastSH) and high > lastSH and close < lastSH
+swingLowSweep  = not na(lastSL) and low  < lastSL and close > lastSL
+prevDayHigh = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
+prevDayLow  = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
+sessHighSweep = not na(prevDayHigh) and high > prevDayHigh and close < prevDayHigh
+sessLowSweep  = not na(prevDayLow)  and low  < prevDayLow  and close > prevDayLow
+recentBullSweep = nz(ta.barssince(eqLowSweep or swingLowSweep or sessLowSweep)) <= i_sweepWin
+recentBearSweep = nz(ta.barssince(eqHighSweep or swingHighSweep or sessHighSweep)) <= i_sweepWin
+
+var float fibHigh_long = na, var float sl_long = na
+var float fibLow_short = na, var float sl_short = na
+if not na(lastSH) and not na(lastSL)
+    diff = math.abs(lastSH - lastSL)
+    fibHigh_long  := lastSH - diff * i_fibLow
+    sl_long       := lastSL - atr_val * sl_mult
+    fibLow_short  := lastSL + diff * i_fibLow
+    sl_short      := lastSH + atr_val * sl_mult
+recentLongTouch  = nz(ta.barssince(not na(fibHigh_long) and low <= fibHigh_long and low >= sl_long)) <= 30
+recentShortTouch = nz(ta.barssince(not na(fibLow_short) and high >= fibLow_short and high <= sl_short)) <= 30
+
+bullVWAP = close > vwap_val
+bearVWAP = close < vwap_val
+
+bullBB = close > ta.sma(close, 20)
+bearBB = close < ta.sma(close, 20)
+
+prevD_Close = request.security(syminfo.tickerid, "D", close[1],lookahead=barmerge.lookahead_on)
+pivotLine   = (prevDayHigh + prevDayLow + prevD_Close) / 3
+bullPivot   = not na(pivotLine) and close > pivotLine
+bearPivot   = not na(pivotLine) and close < pivotLine
+
+recentBullFVG = nz(ta.barssince(low > high[2] and close[1] > open[1])) <= i_sweepWin
+recentBearFVG = nz(ta.barssince(high < low[2] and close[1] < open[1])) <= i_sweepWin
+
+recentBullMSB = nz(ta.barssince(ta.crossover(close, nz(lastSH)))) <= i_sweepWin
+recentBearMSB = nz(ta.barssince(ta.crossunder(close, nz(lastSL)))) <= i_sweepWin
+
+s_time = i_orbSess == "New York (0930-1000)" ? "0930-1000" : i_orbSess == "London (0800-0830)" ? "0800-0830" : "2000-2030"
+t_tz = i_orbSess == "New York (0930-1000)" ? "America/New_York" : i_orbSess == "London (0800-0830)" ? "Europe/London" : "Asia/Tokyo"
+t_sess = time(timeframe.period, s_time, t_tz)
+var float orbHigh = na, var float orbLow  = na
+if i_orbSess != "Disabled/Crypto"
+    if na(t_sess[1]) and not na(t_sess)
+        orbHigh := high
+        orbLow  := low
+    else if not na(t_sess)
+        orbHigh := math.max(orbHigh, high)
+        orbLow  := math.min(orbLow, low)
+bullORB = i_orbSess == "Disabled/Crypto" ? true : (not na(orbHigh) and close > orbHigh)
+bearORB = i_orbSess == "Disabled/Crypto" ? true : (not na(orbLow)  and close < orbLow)
+
+// ==========================================
+// ▶ SECTION 5 — THE 16-FACTOR TOTAL SCORING
+// ==========================================
+int longPts = (mtfBull ? 1 : 0) + (bullHull ? 1 : 0) + (bullVol ? 1 : 0) + (bullMom ? 1 : 0) + (recentBullSweep ? 1 : 0) + (recentLongTouch ? 1 : 0) + (bullVWAP ? 1 : 0) + (bullBB ? 1 : 0) + (bullPivot ? 1 : 0) + (recentBullFVG ? 1 : 0) + (recentBullMSB ? 1 : 0) + (bullORB ? 1 : 0) + (ema_bull_align ? 1 : 0) + (hma_bull ? 1 : 0) + (bb_squeezed ? 1 : 0) + (pivot_near_any ? 1 : 0)
+
+int shortPts= (mtfBear ? 1 : 0) + (bearHull ? 1 : 0) + (bearVol ? 1 : 0) + (bearMom ? 1 : 0) + (recentBearSweep ? 1 : 0) + (recentShortTouch ? 1 : 0) + (bearVWAP ? 1 : 0) + (bearBB ? 1 : 0) + (bearPivot ? 1 : 0) + (recentBearFVG ? 1 : 0) + (recentBearMSB ? 1 : 0) + (bearORB ? 1 : 0) + (ema_bear_align ? 1 : 0) + (hma_bear ? 1 : 0) + (bb_squeezed ? 1 : 0) + (pivot_near_any ? 1 : 0)
+
+// ==========================================
+// ▶ SECTION 6 — GOLDEN WAVE TRIGGER (The Catalyst)
+// ==========================================
+var int state = 0 
+var float active_level = na
+var int bars_since_break = 0
+
+if ta.crossover(close, curr_golden) and close > curr_golden + (atr_val_14 * 0.1)
+    state := 1
+    active_level := curr_golden
+    bars_since_break := 0
+
+if ta.crossunder(close, curr_golden) and close < curr_golden - (atr_val_14 * 0.1)
+    state := -1
+    active_level := curr_golden
+    bars_since_break := 0
+
+bars_since_break += 1
+
+support_buffer = atr_val_14 * zone_size
+
+// ==========================================
+// ▶ SECTION 7 — ASSIMILATED MEGA EXECUTION
+// ==========================================
+// A trade only triggers when the Golden Zone pulls back AND the 16-Factor God-Mode approves the score!
+golden_long_pullback  = (state == 1) and (bars_since_break >= 3) and (low <= active_level + support_buffer)
+golden_short_pullback = (state == -1) and (bars_since_break >= 3) and (high >= active_level - support_buffer)
+
+longCond  = golden_long_pullback and (longPts >= i_reqScore)
+shortCond = golden_short_pullback and (shortPts >= i_reqScore)
+
+var int lastLongBar  = na
+var int lastShortBar = na
+
+isNewLong  = longCond  and (na(lastLongBar)  or bar_index - lastLongBar  > i_boxDist + i_boxLen)
+isNewShort = shortCond and (na(lastShortBar) or bar_index - lastShortBar > i_boxDist + i_boxLen)
+
+if isNewLong
+    lastLongBar  := bar_index
+    state := 0 
+if isNewShort
+    lastShortBar := bar_index
+    state := 0 
+
+// ==========================================
+// ▶ SECTION 8 — BOXES & DYNAMIC LOGGING
+// ==========================================
+var label last_long_lbl = na
+var label last_short_lbl = na
+var int   total_signals = 0
+var int   total_wins    = 0
+var int   total_losses  = 0
+
+if isNewLong
+    int   bSig  = bar_index
+    int   bL    = bSig + i_boxDist
+    int   bR    = bL   + i_boxLen
+    float eLvl  = close
+    float slLvl = math.min(lowest_5, active_level) - (atr_val * sl_mult)
+    float risk  = math.abs(eLvl - slLvl)
+    float tp1   = eLvl + risk * tp1_mult
+
+    line.new(bSig, eLvl, bL, eLvl, color=color.new(color.gray, 50), style=line.style_dashed, width=1)
+    box.new(bL, eLvl,  bR, slLvl, border_color=color.new(color.green,  40), bgcolor=color.new(color.green,  88), text="SL",  text_color=color.new(color.green,  10), text_size=size.tiny, text_halign=text.align_right)
+    line.new(bL, eLvl, bR, eLvl,  color=color.new(color.white, 20), width=2)
+    box.new(bL, tp1, bR, eLvl, border_color=color.new(color.blue,   40), bgcolor=color.new(color.blue,   90), text="TP", text_color=color.new(color.blue,   10), text_size=size.tiny, text_halign=text.align_right)
+
+    last_long_lbl := label.new(bL, slLvl - atr_val * 2.5, "🎯 GOD-MODE GOLDEN 🔥\nScore: [" + str.tostring(longPts) + "/16]\nEntry: " + str.tostring(eLvl, format.mintick), style=label.style_label_up, color=color.new(color.black, 10), textcolor=color.white, textalign=text.align_left, size=size.small)
+
+    strategy.entry("GM Long", strategy.long)
+    strategy.exit("Exit GM Long", "GM Long", stop=slLvl, limit=tp1)
+    total_signals += 1
+
+if isNewShort
+    int   bSig  = bar_index
+    int   bL    = bSig + i_boxDist
+    int   bR    = bL   + i_boxLen
+    float eLvl  = close
+    float slLvl = math.max(highest_5, active_level) + (atr_val * sl_mult)
+    float risk  = math.abs(slLvl - eLvl)
+    float tp1   = eLvl - risk * tp1_mult
+
+    line.new(bSig, eLvl, bL, eLvl, color=color.new(color.gray, 50), style=line.style_dashed, width=1)
+    box.new(bL, slLvl, bR, eLvl,  border_color=color.new(color.red,    40), bgcolor=color.new(color.red,    88), text="SL",  text_color=color.new(color.red,    10), text_size=size.tiny, text_halign=text.align_right)
+    line.new(bL, eLvl, bR, eLvl,  color=color.new(color.white, 20), width=2)
+    box.new(bL, eLvl,  bR, tp1,   border_color=color.new(color.blue, 40), bgcolor=color.new(color.blue, 90), text="TP", text_color=color.new(color.blue, 10), text_size=size.tiny, text_halign=text.align_right)
+
+    last_short_lbl := label.new(bL, slLvl + atr_val * 2.5, "🎯 GOD-MODE GOLDEN 🔥\nScore: [" + str.tostring(shortPts) + "/16]\nEntry: " + str.tostring(eLvl, format.mintick), style=label.style_label_down, color=color.new(color.black, 10), textcolor=color.white, textalign=text.align_left, size=size.small)
+
+    strategy.entry("GM Short", strategy.short)
+    strategy.exit("Exit GM Short", "GM Short", stop=slLvl, limit=tp1)
+    total_signals += 1
+
+// Dynamic Tracker Update
+if strategy.closedtrades > 0
+    trade_len = strategy.closedtrades
+    last_trade_index = strategy.closedtrades.exit_bar_index(trade_len - 1)
+    
+    if bar_index == last_trade_index
+        prof = strategy.closedtrades.profit(trade_len - 1)
+        trade_id = strategy.closedtrades.entry_id(trade_len - 1)
+        
+        result_str = prof > 0 ? "\n━━━━━━━━━\n✅ صفقـة ناجحة" : "\n━━━━━━━━━\n❌ صفقـة خاسرة"
+        color_result = prof > 0 ? color.new(color.green, 20) : color.new(color.gray, 20)
+        
+        if trade_id == "GM Long" and not na(last_long_lbl)
+            curr_txt = label.get_text(last_long_lbl)
+            if not str.contains(curr_txt, "صفقـة")
+                label.set_text(last_long_lbl, curr_txt + result_str)
+                label.set_color(last_long_lbl, color_result)
+                if prof > 0
+                    total_wins += 1
+                else
+                    total_losses += 1
+                
+        if trade_id == "GM Short" and not na(last_short_lbl)
+            curr_txt = label.get_text(last_short_lbl)
+            if not str.contains(curr_txt, "صفقـة")
+                label.set_text(last_short_lbl, curr_txt + result_str)
+                label.set_color(last_short_lbl, color_result)
+                // Short updates
+                if prof > 0
+                    total_wins += 1
+                else
+                    total_losses += 1
+
+win_rate = total_signals > 0 ? (total_wins / total_signals) * 100.0 : 0.0
+
+// ==========================================
+// ▶ SECTION 9 — ASSIMILATED DASHBOARD
+// ==========================================
+var table topDash = table.new(position.top_right, 2, 11, bgcolor=color.new(color.black, 85), border_color=color.new(color.gray, 80), border_width=1)
+var table botDash = table.new(position.bottom_right, 2, 6, bgcolor=color.new(color.black, 60), border_color=color.new(color.gray, 40), border_width=1, frame_color=color.gray, frame_width=1)
+
+if barstate.islast and i_showD
+    // TOP RIGHT
+    table.cell(topDash, 0, 0, "⚡ GOD-MODE GOLDEN ⚡", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(topDash, 1, 0, "ASSIMILATED",      text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(topDash, 0, 1, "Long Score",       text_color=color.white, text_size=size.small)
+    table.cell(topDash, 1, 1, str.tostring(longPts) + " / 16", text_color=longPts >= i_reqScore ? color.lime : color.gray, text_size=size.small)
+    table.cell(topDash, 0, 2, "Short Score",      text_color=color.white, text_size=size.small)
+    table.cell(topDash, 1, 2, str.tostring(shortPts) + " / 16", text_color=shortPts >= i_reqScore ? color.red : color.gray, text_size=size.small)
+    
+    table.cell(topDash, 0, 3, "FVG Status",       text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 3, recentBullFVG ? "BULL" : recentBearFVG ? "BEAR" : "-", text_color=recentBullFVG ? color.lime : recentBearFVG ? color.red : color.gray, text_size=size.tiny)
+    table.cell(topDash, 0, 4, "CHoCH / BOS",      text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 4, recentBullMSB ? "BULL BREAK" : recentBearMSB ? "BEAR BREAK" : "-", text_color=recentBullMSB ? color.lime : recentBearMSB ? color.red : color.gray, text_size=size.tiny)
+    
+    table.cell(topDash, 0, 5, "VWAP Line",        text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 5, bullVWAP ? "ABOVE" : bearVWAP ? "BELOW" : "-", text_color=bullVWAP ? color.lime : bearVWAP ? color.red : color.gray, text_size=size.tiny)
+    s_label = i_orbSess == "New York (0930-1000)" ? "ORB (NY)" : i_orbSess == "London (0800-0830)" ? "ORB (LON)" : i_orbSess == "Asian (2000-2030)" ? "ORB (ASIA)" : "ORB"
+    s_val = i_orbSess == "Disabled/Crypto" ? "DISABLED" : bullORB ? "BROKEN UP" : bearORB ? "BROKEN DOWN" : "INSIDE"
+    table.cell(topDash, 0, 6, s_label, text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 6, s_val, text_color=i_orbSess == "Disabled/Crypto" ? color.gray : bullORB ? color.lime : bearORB ? color.red : color.gray, text_size=size.tiny)
+    
+    table.cell(topDash, 0, 7, "Alpha EMA",        text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 7, ema_bull_align ? "BULLISH" : "BEARISH", text_color=ema_bull_align ? color.lime : color.red, text_size=size.tiny)
+    table.cell(topDash, 0, 8, "Alpha Hull MA",    text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 8, hma_bull ? "BULL TREND" : "BEAR TREND", text_color=hma_bull ? color.lime : color.red, text_size=size.tiny)
+    table.cell(topDash, 0, 9, "BB Volatility",    text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 9, bb_squeezed ? "SQUEEZED" : "EXPANDED", text_color=bb_squeezed ? color.lime : color.gray, text_size=size.tiny)
+    table.cell(topDash, 0, 10,"Pivot Proximity",  text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 10, pivot_near_any ? "NEAR LEVEL" : "CLEAR", text_color=pivot_near_any ? color.yellow : color.gray, text_size=size.tiny)
+
+    // BOTTOM RIGHT
+    table.cell(botDash, 0, 0, "GOLDEN GOD-MODE OUTCOMES", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 30), text_halign=text.align_center)
+    table.merge_cells(botDash, 0, 0, 1, 0)
+    string[] lbls = array.from("Total Signals","Wins","Losses","Win Rate","RR Ratio")
+    string[] vals = array.from(str.tostring(total_signals), str.tostring(total_wins), str.tostring(total_losses), str.format("{0,number,#.#}%", win_rate), str.format("1:{0,number,#.##}", tp1_mult / sl_mult))
+    color[] vcols = array.from(color.white, color.lime, color.red, win_rate >= 50.0 ? color.lime : color.red, color.white)
+    for i = 0 to 4
+        table.cell(botDash, 0, i + 1, array.get(lbls, i), text_color=color.new(color.gray, 20), text_size=size.small, text_halign=text.align_left)
+        table.cell(botDash, 1, i + 1, array.get(vals, i), text_color=array.get(vcols, i), text_size=size.small, text_halign=text.align_right)
+
+// Optional Overlays
+plot(show_overlays ? ema_fast : na, "EMA Fast", color=color.new(color.aqua,   0), linewidth=1)
+plot(show_overlays ? ema_slow : na, "EMA Slow", color=color.new(color.orange, 0), linewidth=1)
+plot(show_overlays ? hma_val : na, "Hull MA", color=hma_slope > 0 ? color.new(color.lime, 30): color.new(color.red, 30), linewidth=2)
+plot(show_overlays ? vwap_val : na, "VWAP", color=color.new(color.yellow, 20), linewidth=2)

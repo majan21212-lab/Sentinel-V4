@@ -1,0 +1,437 @@
+//@version=6
+indicator("Alpha-Gate Mega-Confluence", shorttitle="AlphaGate V1", overlay=true, max_boxes_count=300, max_lines_count=300, max_labels_count=300)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 1 — UNIFIED MASTER INPUTS
+// ═══════════════════════════════════════════════════════════
+
+// ── 🎯 ALPHA-GATE SETTINGS ──
+grp_gate = "🎯 The Alpha-Gate"
+i_reqScore = input.int(7, "Minimum God-Mode Confluence (1-12)", minval=1, maxval=12, step=1, group=grp_gate, tooltip="AlphaSignal MVP will NOT trigger unless it scores at least this high in the God-Mode backend.")
+
+// ── ⚙️ ALPHASIGNAL MVP CORE ──
+grp_alpha = "⚙️ AlphaSignal Core"
+ema_fast_len = input.int(9,         "Fast EMA Length",  minval=2,            group=grp_alpha)
+ema_slow_len = input.int(21,        "Slow EMA Length",  minval=3,            group=grp_alpha)
+ema_src      = input.source(close,  "EMA Source",                            group=grp_alpha)
+hma_len      = input.int(16,        "HMA Length",       minval=4,            group=grp_alpha)
+hma_src      = input.source(close,  "HMA Source",                            group=grp_alpha)
+
+grp_bb = "⚙️ AlphaSignal Bollinger Bands"
+bb_len   = input.int(20,       "BB Length",          minval=5,              group=grp_bb)
+bb_mult  = input.float(2.0,    "BB Std Dev Mult",    minval=0.5, step=0.1,  group=grp_bb)
+bb_src   = input.source(close, "BB Source",                                 group=grp_bb)
+
+grp_pivots = "⚙️ AlphaSignal Pivots"
+pp_res    = input.timeframe("D",      "Pivot Resolution",                          group=grp_pivots)
+pp_type   = input.string("Classical", "Pivot Type", options=["Classical","Fibonacci","Woodie","Camarilla"], group=grp_pivots)
+pp_levels = input.int(2, "Levels Above/Below (1-3)", minval=1, maxval=3,           group=grp_pivots)
+
+grp_filters = "⚙️ AlphaSignal Filters"
+sig_req_ema_align   = input.bool(true,  "Require EMA alignment",              group=grp_filters)
+sig_req_vwap_side   = input.bool(true,  "Require price on correct VWAP side", group=grp_filters)
+sig_req_bb_squeeze  = input.bool(false, "Only signal during BB squeeze",      group=grp_filters)
+sig_req_hma_slope   = input.bool(true,  "Require HMA trending with signal",   group=grp_filters)
+sig_req_pivot_level = input.bool(false, "Require price near a Pivot level",   group=grp_filters)
+
+// ── ⚡ GOD-MODE 12-FACTOR CORE ──
+grp_god = "⚡ God-Mode Subsystem"
+i_orbSess    = input.string("New York (0930-1000)", "ORB Session", options=["New York (0930-1000)", "London (0800-0830)", "Asian (2000-2030)", "Disabled/Crypto"], group=grp_god)
+i_tf1        = input.timeframe("240", "HTF 1 (Master Trend)",  group=grp_god)
+i_tf2        = input.timeframe("60",  "HTF 2 (Mid-Term Trend)",group=grp_god)
+i_noRepaint  = input.bool(true, "No-Repaint (Use Closed HTF)",group=grp_god)
+i_emaLen     = input.int(200,   "God-Mode HTF EMA Length",    group=grp_god)
+i_hullLen    = input.int(25,    "God-Mode Baseline Length",   group=grp_god)
+i_ignVol     = input.bool(false, "Ignore Volume (Tick Data/Forex)", group=grp_god)
+i_volLen     = input.int(20,    "Volume Z-Score Length",       group=grp_god)
+i_volTh      = input.float(0.8, "Volume Z-Score Threshold",    group=grp_god, step=0.1)
+i_tmoLen     = input.int(7,     "TMO Length",                  group=grp_god)
+i_swing      = input.int(5,     "Swing Pivot Structure Length", group=grp_god, minval=3)
+
+grp_fib   = "📐 God-Mode Fib & Liquidity"
+i_fibLow  = input.float(0.382, "Fib Low Level",             group=grp_fib, step=0.01)
+i_fibHigh = input.float(0.618, "Fib High Level",            group=grp_fib, step=0.01)
+i_eqLen   = input.int(3,      "Equal H/L Tolerance (bars)", group=grp_fib, minval=2)
+i_eqTol   = input.float(0.1,  "Equal H/L ATR Tolerance",    group=grp_fib, step=0.05)
+i_sweepWin= input.int(10,     "Sweep Window (bars)",        group=grp_fib, minval=3)
+i_zoneCD  = input.int(5,     "Signal Cooldown (bars)",      group=grp_fib, minval=1)
+
+// ── ⚖️ RISK & REWARD (Unified) ──
+grp_risk = "⚖️ Risk & Execution"
+i_atrLen  = input.int(14,    "ATR Length",                  group=grp_risk)
+sl_mult   = input.float(1.5, "Stop Loss ATR Multiplier",    group=grp_risk, step=0.1)
+tp1_mult  = input.float(1.0, "TP1 Risk/Reward Multiplier",  group=grp_risk, step=0.1)
+tp2_mult  = input.float(2.0, "TP2 Risk/Reward Multiplier",  group=grp_risk, step=0.1)
+
+// ── 🎨 VISUALS & LOGS ──
+grp_ui = "🎨 Visuals"
+i_boxDist = input.int(8,     "Box Gap (bars)",              group=grp_ui, minval=1)
+i_boxLen  = input.int(15,    "Box Width (bars)",            group=grp_ui, minval=5)
+ema_show  = input.bool(true, "Show AlphaSignal EMAs",       group=grp_ui)
+bb_show   = input.bool(true, "Show Bollinger Bands",        group=grp_ui)
+vwap_show = input.bool(true, "Show VWAP & Std Dev Bands",   group=grp_ui)
+hma_show  = input.bool(true, "Show AlphaSignal HMA",        group=grp_ui)
+pp_show   = input.bool(true, "Show Pivot Levels",           group=grp_ui)
+i_showD   = input.bool(true, "Show Master Dashboards",      group=grp_ui)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 2 — SHARED INDICATORS (ATR/VWAP)
+// ═══════════════════════════════════════════════════════════
+
+// ── ATR ──
+atr_val = ta.atr(i_atrLen)
+
+// ── VWAP ──
+vwap_val = ta.vwap(hlc3)
+var float vwap_sum  = 0.0
+var float vwap_sum2 = 0.0
+var float vwap_vol  = 0.0
+
+if ta.change(time("D")) != 0 or barstate.isfirst
+    vwap_sum  := 0.0
+    vwap_sum2 := 0.0
+    vwap_vol  := 0.0
+
+vwap_sum  += hlc3 * volume
+vwap_vol  += volume
+vwap_sum2 += hlc3 * hlc3 * volume
+
+vwap_avg    = vwap_sum / vwap_vol
+vwap_var    = (vwap_sum2 / vwap_vol) - vwap_avg * vwap_avg
+vwap_sd     = math.sqrt(math.max(vwap_var, 0.0))
+vwap_upper1 = vwap_val + vwap_sd
+vwap_lower1 = vwap_val - vwap_sd
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 3 — ALPHASIGNAL MVP ENGINE (Setup Hunter)
+// ═══════════════════════════════════════════════════════════
+
+ema_fast = ta.ema(ema_src, ema_fast_len)
+ema_slow = ta.ema(ema_src, ema_slow_len)
+
+[bb_mid, bb_upper, bb_lower] = ta.bb(bb_src, bb_len, bb_mult)
+bb_width = bb_upper - bb_lower
+
+hma_half  = ta.wma(hma_src, math.floor(hma_len / 2))
+hma_full  = ta.wma(hma_src, hma_len)
+hma_raw   = 2.0 * hma_half - hma_full
+hma_val   = ta.wma(hma_raw, math.floor(math.sqrt(float(hma_len))))
+hma_slope = hma_val - hma_val[2]
+
+pp_high  = request.security(syminfo.tickerid, pp_res, high[1],  lookahead=barmerge.lookahead_on)
+pp_low   = request.security(syminfo.tickerid, pp_res, low[1],   lookahead=barmerge.lookahead_on)
+pp_close = request.security(syminfo.tickerid, pp_res, close[1], lookahead=barmerge.lookahead_on)
+
+pp_P  = (pp_high + pp_low + pp_close) / 3.0
+pp_R1 = pp_type == "Classical" ? 2.0 * pp_P - pp_low : pp_type == "Fibonacci" ? pp_P + 0.382 * (pp_high - pp_low) : pp_type == "Woodie" ? (pp_high + pp_low + 2.0 * pp_close) / 4.0 + (pp_high - pp_low) : pp_P + (pp_high - pp_low) * 1.0828
+pp_S1 = pp_type == "Classical" ? 2.0 * pp_P - pp_high : pp_type == "Fibonacci" ? pp_P - 0.382 * (pp_high - pp_low) : pp_type == "Woodie" ? (pp_high + pp_low + 2.0 * pp_close) / 4.0 - (pp_high - pp_low) : pp_P - (pp_high - pp_low) * 1.0828
+pp_R2 = pp_type == "Classical" ? pp_P + (pp_high - pp_low) : pp_type == "Fibonacci" ? pp_P + 0.618 * (pp_high - pp_low) : pp_type == "Woodie" ? pp_R1 + (pp_high - pp_low) : pp_P + (pp_high - pp_low) * 1.1375
+pp_S2 = pp_type == "Classical" ? pp_P - (pp_high - pp_low) : pp_type == "Fibonacci" ? pp_P - 0.618 * (pp_high - pp_low) : pp_type == "Woodie" ? pp_S1 - (pp_high - pp_low) : pp_P - (pp_high - pp_low) * 1.1375
+pp_R3 = pp_type == "Classical" ? pp_high + 2.0 * (pp_P - pp_low) : pp_type == "Fibonacci" ? pp_P + (pp_high - pp_low) : pp_type == "Woodie" ? pp_R2 + (pp_high - pp_low) : pp_P + (pp_high - pp_low) * 1.2700
+pp_S3 = pp_type == "Classical" ? pp_low - 2.0 * (pp_high - pp_P) : pp_type == "Fibonacci" ? pp_P - (pp_high - pp_low) : pp_type == "Woodie" ? pp_S2 - (pp_high - pp_low) : pp_P - (pp_high - pp_low) * 1.2700
+
+ema_cross_bull = ta.crossover(ema_fast,  ema_slow)
+ema_cross_bear = ta.crossunder(ema_fast, ema_slow)
+cross_pp_R1    = ta.crossover(close,  pp_R1)
+cross_pp_R2    = ta.crossover(close,  pp_R2)
+cross_pp_S1    = ta.crossunder(close, pp_S1)
+cross_pp_S2    = ta.crossunder(close, pp_S2)
+pp_bull_break  = cross_pp_R1 or cross_pp_R2
+pp_bear_break  = cross_pp_S1 or cross_pp_S2
+
+core_long  = ema_cross_bull or pp_bull_break
+core_short = ema_cross_bear or pp_bear_break
+
+ema_bull_align   = ema_fast > ema_slow
+ema_bear_align   = ema_fast < ema_slow
+price_above_vwap = close > vwap_val
+price_below_vwap = close < vwap_val
+bb_squeezed      = bb_width < 2.0 * atr_val
+hma_bull         = hma_slope > 0.0
+hma_bear         = hma_slope < 0.0
+
+pivot_near_any = math.abs(close - pp_P) < atr_val * 0.5 or math.abs(close - pp_R1) < atr_val * 0.5 or math.abs(close - pp_S1) < atr_val * 0.5 or math.abs(close - pp_R2) < atr_val * 0.5 or math.abs(close - pp_S2) < atr_val * 0.5
+
+confirm_long = (not sig_req_ema_align or ema_bull_align) and (not sig_req_vwap_side or price_above_vwap) and (not sig_req_bb_squeeze or bb_squeezed) and (not sig_req_hma_slope or hma_bull) and (not sig_req_pivot_level or pivot_near_any)
+confirm_short = (not sig_req_ema_align or ema_bear_align) and (not sig_req_vwap_side or price_below_vwap) and (not sig_req_bb_squeeze or bb_squeezed) and (not sig_req_hma_slope or hma_bear) and (not sig_req_pivot_level or pivot_near_any)
+
+alpha_buy  = core_long  and confirm_long
+alpha_sell = core_short and confirm_short
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 4 — GOD-MODE 12-FACTOR ENGINE (The Validator)
+// ═══════════════════════════════════════════════════════════
+
+baseline = ta.hma(close, i_hullLen)
+
+// F1: MTF Trend
+f_get_trend(_tf) =>
+    _bull = close > ta.ema(close, i_emaLen)
+    _bear = close < ta.ema(close, i_emaLen)
+    _resBull = i_noRepaint ? request.security(syminfo.tickerid, _tf, _bull[1], lookahead=barmerge.lookahead_on) : request.security(syminfo.tickerid, _tf, _bull)
+    _resBear = i_noRepaint ? request.security(syminfo.tickerid, _tf, _bear[1], lookahead=barmerge.lookahead_on) : request.security(syminfo.tickerid, _tf, _bear)
+    [_resBull, _resBear]
+
+[tf1_bull, tf1_bear] = f_get_trend(i_tf1)
+[tf2_bull, tf2_bear] = f_get_trend(i_tf2)
+mtfBull = tf1_bull and tf2_bull
+mtfBear = tf1_bear and tf2_bear
+
+// F2: Hull Baseline
+bullHull = close > baseline
+bearHull = close < baseline
+
+// F3: Volume Spike
+volAvg   = ta.sma(volume, i_volLen)
+volStd   = ta.stdev(volume, i_volLen)
+volZ     = volStd == 0 ? 0.0 : (volume - volAvg) / volStd
+volSpike = ta.ema(volZ, 3) > i_volTh
+bullVol = i_ignVol ? true : volSpike
+bearVol = i_ignVol ? true : volSpike
+
+// F4: TMO Momentum
+osc      = ta.mom(ta.sma(ta.sma(close, i_tmoLen), i_tmoLen), i_tmoLen)
+bullMom  = ta.change(osc) > 0
+bearMom  = ta.change(osc) < 0
+
+// Base Market Structure
+ph = ta.pivothigh(high, i_swing, i_swing)
+pl = ta.pivotlow(low,   i_swing, i_swing)
+var float lastSH = na
+var float lastSL = na
+if not na(ph)
+    lastSH := ph
+if not na(pl)
+    lastSL := pl
+
+// F5: SFP Sweeps
+eqTolPts = atr_val * i_eqTol
+prevHighN = ta.highest(high[1], i_eqLen)
+prevLowN  = ta.lowest(low[1],   i_eqLen)
+eqHighSweep  = math.abs(high[1] - prevHighN[1]) <= eqTolPts and high > prevHighN[1] and close < prevHighN[1]
+eqLowSweep   = math.abs(low[1]  - prevLowN[1])  <= eqTolPts and low  < prevLowN[1]  and close > prevLowN[1]
+swingHighSweep = not na(lastSH) and high > lastSH and close < lastSH
+swingLowSweep  = not na(lastSL) and low  < lastSL and close > lastSL
+prevDayHigh = request.security(syminfo.tickerid, "D", high[1],  lookahead=barmerge.lookahead_on)
+prevDayLow  = request.security(syminfo.tickerid, "D", low[1],   lookahead=barmerge.lookahead_on)
+sessHighSweep = not na(prevDayHigh) and high > prevDayHigh and close < prevDayHigh
+sessLowSweep  = not na(prevDayLow)  and low  < prevDayLow  and close > prevDayLow
+recentBullSweep = nz(ta.barssince(eqLowSweep or swingLowSweep or sessLowSweep)) <= i_sweepWin
+recentBearSweep = nz(ta.barssince(eqHighSweep or swingHighSweep or sessHighSweep)) <= i_sweepWin
+
+// F6: Fib Zone
+var float fibHigh_long = na, var float sl_long = na
+var float fibLow_short = na, var float sl_short = na
+if not na(lastSH) and not na(lastSL)
+    diff = math.abs(lastSH - lastSL)
+    fibHigh_long  := lastSH - diff * i_fibLow
+    sl_long       := lastSL - atr_val * sl_mult
+    fibLow_short  := lastSL + diff * i_fibLow
+    sl_short      := lastSH + atr_val * sl_mult
+recentLongTouch  = nz(ta.barssince(not na(fibHigh_long) and low <= fibHigh_long and low >= sl_long)) <= 30
+recentShortTouch = nz(ta.barssince(not na(fibLow_short) and high >= fibLow_short and high <= sl_short)) <= 30
+
+// F7: VWAP
+bullVWAP = close > vwap_val
+bearVWAP = close < vwap_val
+
+// F8: Bollinger Bands
+bullBB = close > ta.sma(close, 20)
+bearBB = close < ta.sma(close, 20)
+
+// F9: Daily Pivot
+prevD_Close = request.security(syminfo.tickerid, "D", close[1],lookahead=barmerge.lookahead_on)
+pivotLine   = (prevDayHigh + prevDayLow + prevD_Close) / 3
+bullPivot   = not na(pivotLine) and close > pivotLine
+bearPivot   = not na(pivotLine) and close < pivotLine
+
+// F10: FVG
+recentBullFVG = nz(ta.barssince(low > high[2] and close[1] > open[1])) <= i_sweepWin
+recentBearFVG = nz(ta.barssince(high < low[2] and close[1] < open[1])) <= i_sweepWin
+
+// F11: CHoCH
+recentBullMSB = nz(ta.barssince(ta.crossover(close, nz(lastSH)))) <= i_sweepWin
+recentBearMSB = nz(ta.barssince(ta.crossunder(close, nz(lastSL)))) <= i_sweepWin
+
+// F12: ORB
+s_time = i_orbSess == "New York (0930-1000)" ? "0930-1000" : i_orbSess == "London (0800-0830)" ? "0800-0830" : "2000-2030"
+t_tz = i_orbSess == "New York (0930-1000)" ? "America/New_York" : i_orbSess == "London (0800-0830)" ? "Europe/London" : "Asia/Tokyo"
+t_sess = time(timeframe.period, s_time, t_tz)
+var float orbHigh = na, var float orbLow  = na
+if i_orbSess != "Disabled/Crypto"
+    if na(t_sess[1]) and not na(t_sess)
+        orbHigh := high
+        orbLow  := low
+    else if not na(t_sess)
+        orbHigh := math.max(orbHigh, high)
+        orbLow  := math.min(orbLow, low)
+bullORB = i_orbSess == "Disabled/Crypto" ? true : (not na(orbHigh) and close > orbHigh)
+bearORB = i_orbSess == "Disabled/Crypto" ? true : (not na(orbLow)  and close < orbLow)
+
+int longPts = (mtfBull ? 1 : 0) + (bullHull ? 1 : 0) + (bullVol ? 1 : 0) + (bullMom ? 1 : 0) + (recentBullSweep ? 1 : 0) + (recentLongTouch ? 1 : 0) + (bullVWAP ? 1 : 0) + (bullBB ? 1 : 0) + (bullPivot ? 1 : 0) + (recentBullFVG ? 1 : 0) + (recentBullMSB ? 1 : 0) + (bullORB ? 1 : 0)
+int shortPts= (mtfBear ? 1 : 0) + (bearHull ? 1 : 0) + (bearVol ? 1 : 0) + (bearMom ? 1 : 0) + (recentBearSweep ? 1 : 0) + (recentShortTouch ? 1 : 0) + (bearVWAP ? 1 : 0) + (bearBB ? 1 : 0) + (bearPivot ? 1 : 0) + (recentBearFVG ? 1 : 0) + (recentBearMSB ? 1 : 0) + (bearORB ? 1 : 0)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 5 — THE ALPHA-GATE (Execution)
+// ═══════════════════════════════════════════════════════════
+
+gate_open_long  = alpha_buy  and (longPts  >= i_reqScore)
+gate_open_short = alpha_sell and (shortPts >= i_reqScore)
+
+var int lastLongBar  = na
+var int lastShortBar = na
+
+isNewLong  = gate_open_long  and (na(lastLongBar)  or bar_index - lastLongBar  > i_zoneCD + i_boxDist + i_boxLen)
+isNewShort = gate_open_short and (na(lastShortBar) or bar_index - lastShortBar > i_zoneCD + i_boxDist + i_boxLen)
+
+if isNewLong
+    lastLongBar  := bar_index
+if isNewShort
+    lastShortBar := bar_index
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 6 — SIGNALS, BOXES & TRACKING
+// ═══════════════════════════════════════════════════════════
+
+var int   tState        = 0 // 1 = Long, -1 = Short, 0 = Flat
+var float tSL           = na
+var float tTP           = na
+var int   tEntryBar     = na
+var int   total_signals = 0
+var int   total_wins    = 0
+var int   total_losses  = 0
+
+if isNewLong
+    int   bSig  = bar_index
+    int   bL    = bSig + i_boxDist
+    int   bR    = bL   + i_boxLen
+    float eLvl  = close
+    float slLvl = eLvl - atr_val * sl_mult
+    float risk  = math.abs(eLvl - slLvl)
+    float tp1   = eLvl + risk * tp1_mult
+    float tp2   = eLvl + risk * tp2_mult
+
+    line.new(bSig, eLvl, bL, eLvl, color=color.new(color.gray, 50), style=line.style_dashed, width=1)
+    box.new(bL, eLvl,  bR, slLvl, border_color=color.new(color.red,  40), bgcolor=color.new(color.red,  88), text="SL",  text_color=color.new(color.red,  10), text_size=size.tiny, text_halign=text.align_right)
+    line.new(bL, eLvl, bR, eLvl,  color=color.new(color.white, 20), width=2)
+    box.new(bL, tp1, bR, eLvl, border_color=color.new(color.blue,   40), bgcolor=color.new(color.blue,   90), text="TP1", text_color=color.new(color.blue,   10), text_size=size.tiny, text_halign=text.align_right)
+    box.new(bL, tp2, bR, tp1,  border_color=color.new(color.lime,   40), bgcolor=color.new(color.lime,   90), text="TP2", text_color=color.new(color.lime,   10), text_size=size.tiny, text_halign=text.align_right)
+
+    label.new(bSig, slLvl - atr_val * 1.5, "ALPHA-GATE BUY 🔥 [" + str.tostring(longPts) + "/12]\nEntry: " + str.tostring(eLvl, format.mintick), style=label.style_label_up, color=color.new(color.black, 10), textcolor=color.white, textalign=text.align_left, size=size.small)
+
+    tState        := 1
+    tSL           := slLvl
+    tTP           := tp1
+    tEntryBar     := bar_index
+    total_signals += 1
+
+if isNewShort
+    int   bSig  = bar_index
+    int   bL    = bSig + i_boxDist
+    int   bR    = bL   + i_boxLen
+    float eLvl  = close
+    float slLvl = eLvl + atr_val * sl_mult
+    float risk  = math.abs(slLvl - eLvl)
+    float tp1   = eLvl - risk * tp1_mult
+    float tp2   = eLvl - risk * tp2_mult
+
+    line.new(bSig, eLvl, bL, eLvl, color=color.new(color.gray, 50), style=line.style_dashed, width=1)
+    box.new(bL, slLvl, bR, eLvl,  border_color=color.new(color.red,    40), bgcolor=color.new(color.red,    88), text="SL",  text_color=color.new(color.red,    10), text_size=size.tiny, text_halign=text.align_right)
+    line.new(bL, eLvl, bR, eLvl,  color=color.new(color.white, 20), width=2)
+    box.new(bL, eLvl,  bR, tp1,   border_color=color.new(color.blue, 40), bgcolor=color.new(color.blue, 90), text="TP1", text_color=color.new(color.blue, 10), text_size=size.tiny, text_halign=text.align_right)
+    box.new(bL, tp1,   bR, tp2,   border_color=color.new(color.lime, 40), bgcolor=color.new(color.lime, 90), text="TP2", text_color=color.new(color.lime, 10), text_size=size.tiny, text_halign=text.align_right)
+
+    label.new(bSig, slLvl + atr_val * 1.5, "ALPHA-GATE SHORT 🔥 [" + str.tostring(shortPts) + "/12]\nEntry: " + str.tostring(eLvl, format.mintick), style=label.style_label_down, color=color.new(color.black, 10), textcolor=color.white, textalign=text.align_left, size=size.small)
+
+    tState        := -1
+    tSL           := slLvl
+    tTP           := tp1
+    tEntryBar     := bar_index
+    total_signals += 1
+
+// Active Tracker
+if tState == 1 and bar_index > tEntryBar
+    if high >= tTP
+        label.new(bar_index, tTP + atr_val * 2.5, "✅ WIN", style=label.style_label_down, color=color.new(color.lime, 40), textcolor=color.black, size=size.small)
+        tState := 0
+        total_wins += 1
+    else if low <= tSL
+        label.new(bar_index, tSL - atr_val * 2.5, "❌ LOSS", style=label.style_label_up, color=color.new(color.red, 40), textcolor=color.white, size=size.small)
+        tState := 0
+        total_losses += 1
+
+if tState == -1 and bar_index > tEntryBar
+    if low <= tTP
+        label.new(bar_index, tTP - atr_val * 2.5, "✅ WIN", style=label.style_label_up, color=color.new(color.lime, 40), textcolor=color.black, size=size.small)
+        tState := 0
+        total_wins += 1
+    else if high >= tSL
+        label.new(bar_index, tSL + atr_val * 2.5, "❌ LOSS", style=label.style_label_down, color=color.new(color.red, 40), textcolor=color.white, size=size.small)
+        tState := 0
+        total_losses += 1
+
+win_rate = total_signals > 0 ? (total_wins / total_signals) * 100.0 : 0.0
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 7 — DUAL UI DASHBOARDS
+// ═══════════════════════════════════════════════════════════
+
+var table topDash = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 85), border_color=color.new(color.gray, 80), border_width=1)
+var table botDash = table.new(position.bottom_right, 2, 6, bgcolor=color.new(color.black, 60), border_color=color.new(color.gray, 40), border_width=1, frame_color=color.gray, frame_width=1)
+
+if barstate.islast and i_showD
+    // God-Mode Confluence Table (TOP RIGHT)
+    table.cell(topDash, 0, 0, "⚡ GOD-MODE GATE", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(topDash, 1, 0, "V1.0",           text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.blue, 60))
+    table.cell(topDash, 0, 1, "Long Score",     text_color=color.white, text_size=size.small)
+    table.cell(topDash, 1, 1, str.tostring(longPts) + " / 12", text_color=longPts >= i_reqScore ? color.lime : color.gray, text_size=size.small)
+    table.cell(topDash, 0, 2, "Short Score",    text_color=color.white, text_size=size.small)
+    table.cell(topDash, 1, 2, str.tostring(shortPts) + " / 12", text_color=shortPts >= i_reqScore ? color.red : color.gray, text_size=size.small)
+    table.cell(topDash, 0, 3, "FVG Status",     text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 3, recentBullFVG ? "BULL" : recentBearFVG ? "BEAR" : "-", text_color=recentBullFVG ? color.lime : recentBearFVG ? color.red : color.gray, text_size=size.tiny)
+    table.cell(topDash, 0, 4, "CHoCH / BOS",    text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 4, recentBullMSB ? "BULL BREAK" : recentBearMSB ? "BEAR BREAK" : "-", text_color=recentBullMSB ? color.lime : recentBearMSB ? color.red : color.gray, text_size=size.tiny)
+    table.cell(topDash, 0, 5, "VWAP Line",      text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 5, bullVWAP ? "ABOVE" : bearVWAP ? "BELOW" : "-", text_color=bullVWAP ? color.lime : bearVWAP ? color.red : color.gray, text_size=size.tiny)
+    s_label = i_orbSess == "New York (0930-1000)" ? "ORB (NY)" : i_orbSess == "London (0800-0830)" ? "ORB (LON)" : i_orbSess == "Asian (2000-2030)" ? "ORB (ASIA)" : "ORB"
+    s_val = i_orbSess == "Disabled/Crypto" ? "DISABLED" : bullORB ? "BROKEN UP" : bearORB ? "BROKEN DOWN" : "INSIDE"
+    table.cell(topDash, 0, 6, s_label, text_color=color.white, text_size=size.tiny)
+    table.cell(topDash, 1, 6, s_val, text_color=i_orbSess == "Disabled/Crypto" ? color.gray : bullORB ? color.lime : bearORB ? color.red : color.gray, text_size=size.tiny)
+
+    // AlphaSignal Outcome Tracker (BOTTOM RIGHT)
+    table.cell(botDash, 0, 0, "ALPHA MVP OUTCOME TRACKER", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 30), text_halign=text.align_center)
+    table.merge_cells(botDash, 0, 0, 1, 0)
+    string[] lbls = array.from("Total Signals","Wins","Losses","Win Rate","RR Ratio")
+    string[] vals = array.from(str.tostring(total_signals), str.tostring(total_wins), str.tostring(total_losses), str.format("{0,number,#.#}%", win_rate), str.format("1:{0,number,#.##}", tp1_mult / sl_mult))
+    color[] vcols = array.from(color.white, color.lime, color.red, win_rate >= 50.0 ? color.lime : color.red, color.white)
+    for i = 0 to 4
+        table.cell(botDash, 0, i + 1, array.get(lbls, i), text_color=color.new(color.gray, 20), text_size=size.small, text_halign=text.align_left)
+        table.cell(botDash, 1, i + 1, array.get(vals, i), text_color=array.get(vcols, i), text_size=size.small, text_halign=text.align_right)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 8 — PLOTS (Visual Background Overlays)
+// ═══════════════════════════════════════════════════════════
+
+plot(ema_show ? ema_fast : na, "EMA Fast", color=color.new(color.aqua,   0), linewidth=1)
+plot(ema_show ? ema_slow : na, "EMA Slow", color=color.new(color.orange, 0), linewidth=1)
+
+p_bb_upper = plot(bb_show ? bb_upper : na, "BB Upper", color=color.new(color.gray, 60), linewidth=1)
+p_bb_lower = plot(bb_show ? bb_lower : na, "BB Lower", color=color.new(color.gray, 60), linewidth=1)
+plot(bb_show ? bb_mid : na, "BB Mid", color=color.new(color.gray, 80), linewidth=1)
+fill(p_bb_upper, p_bb_lower, color=color.new(color.gray, 92))
+
+plot(vwap_show ? vwap_val    : na, "VWAP",        color=color.new(color.yellow, 0),  linewidth=2)
+plot(vwap_show ? vwap_upper1 : na, "VWAP +1SD",   color=color.new(color.yellow, 65), linewidth=1)
+plot(vwap_show ? vwap_lower1 : na, "VWAP -1SD",   color=color.new(color.yellow, 65), linewidth=1)
+
+hma_col = hma_val > hma_val[1] ? color.new(color.lime, 20) : color.new(color.red, 20)
+plot(hma_show ? hma_val : na, "Hull MA", color=hma_col, linewidth=2)
+
+plot(pp_show ? pp_P : na, "Pivot", color=color.new(color.white, 30), linewidth=1, style=plot.style_linebr)
+plot(pp_show and pp_levels >= 1 ? pp_R1 : na, "R1", color=color.new(color.red,   40), linewidth=1, style=plot.style_linebr)
+plot(pp_show and pp_levels >= 1 ? pp_S1 : na, "S1", color=color.new(color.green, 40), linewidth=1, style=plot.style_linebr)
+plot(pp_show and pp_levels >= 2 ? pp_R2 : na, "R2", color=color.new(color.red,   60), linewidth=1, style=plot.style_linebr)
+plot(pp_show and pp_levels >= 2 ? pp_S2 : na, "S2", color=color.new(color.green, 60), linewidth=1, style=plot.style_linebr)
+
+alertcondition(isNewLong,  "Alpha-Gate BUY",  "Alpha-Gate BUY 🔥 {{ticker}} | Entry: {{close}}")
+alertcondition(isNewShort, "Alpha-Gate SELL", "Alpha-Gate SELL 🔥 {{ticker}} | Entry: {{close}}")

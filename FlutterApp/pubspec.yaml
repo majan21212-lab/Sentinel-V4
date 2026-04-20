@@ -1,0 +1,26 @@
+name: jewel_elite
+description: "High-Performance Institutional Trading Bot Dashboard"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.1.0
+  web_socket_channel: ^2.4.0
+  intl: ^0.19.0
+  glassmorphism: ^3.0.0
+  interactive_chart: ^0.3.4
+  provider: ^6.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

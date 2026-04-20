@@ -1,0 +1,101 @@
+//@version=5
+strategy("RSI + MA Crossover Enhanced", overlay=true, initial_capital=200, default_qty_type=strategy.cash, default_qty_value=200)
+
+// Parameters
+rsiLength = input.int(14, "RSI Length")
+rsiOverbought = input.int(70, "RSI Overbought")
+rsiOversold = input.int(30, "RSI Oversold")
+fastMA = input.int(9, "Fast MA")
+slowMA = input.int(21, "Slow MA")
+
+// Risk Management Parameters
+tp_perc = input.float(2.0, "Take Profit (%)", step=0.1)
+sl_perc = input.float(1.0, "Stop Loss (%)", step=0.1)
+box_offset = input.int(5, "Box Offset (Bars)")
+
+// Indicators
+rsi = ta.rsi(close, rsiLength)
+ma9 = ta.sma(close, fastMA)
+ma21 = ta.sma(close, slowMA)
+
+// Conditions
+longCondition = ta.crossover(ma9, ma21) and rsi < rsiOverbought
+shortCondition = ta.crossunder(ma9, ma21) and rsi > rsiOversold
+
+// Variables to track entry levels
+var float entryPrice = na
+var float tpPrice = na
+var float slPrice = na
+var box tradeBox = na
+var label entryLabel = na
+var label tpLabel = na
+var label slLabel = na
+
+// Function to clean up old drawings
+cleanDrawings() =>
+    if not na(tradeBox)
+        box.delete(tradeBox)
+    if not na(entryLabel)
+        label.delete(entryLabel)
+    if not na(tpLabel)
+        label.delete(tpLabel)
+    if not na(slLabel)
+        label.delete(slLabel)
+
+// Execute trades and Draw Boxes
+if (longCondition)
+    strategy.entry("Long", strategy.long)
+    entryPrice := close
+    tpPrice := entryPrice * (1 + tp_perc / 100)
+    slPrice := entryPrice * (1 - sl_perc / 100)
+    
+    // Visuals
+    cleanDrawings()
+    
+    // Draw TP/SL Box
+    tradeBox := box.new(bar_index + box_offset, tpPrice, bar_index + box_offset + 5, slPrice, 
+         bgcolor=color.new(color.green, 85), border_color=color.green, 
+         extend=extend.none)
+    
+    // Labels
+    entryLabel := label.new(bar_index + box_offset + 6, entryPrice, "Entry: " + str.tostring(entryPrice, "#.##"), 
+         color=color.blue, textcolor=color.white, style=label.style_label_left)
+    tpLabel := label.new(bar_index + box_offset + 6, tpPrice, "TP: " + str.tostring(tpPrice, "#.##"), 
+         color=color.green, textcolor=color.white, style=label.style_label_left)
+    slLabel := label.new(bar_index + box_offset + 6, slPrice, "SL: " + str.tostring(slPrice, "#.##"), 
+         color=color.red, textcolor=color.white, style=label.style_label_left)
+
+if (shortCondition)
+    strategy.entry("Short", strategy.short)
+    entryPrice := close
+    tpPrice := entryPrice * (1 - tp_perc / 100)
+    slPrice := entryPrice * (1 + sl_perc / 100)
+    
+    // Visuals
+    cleanDrawings()
+    
+    // Draw TP/SL Box
+    tradeBox := box.new(bar_index + box_offset, tpPrice, bar_index + box_offset + 5, slPrice, 
+         bgcolor=color.new(color.red, 85), border_color=color.red, 
+         extend=extend.none)
+         
+    // Labels
+    entryLabel := label.new(bar_index + box_offset + 6, entryPrice, "Entry: " + str.tostring(entryPrice, "#.##"), 
+         color=color.blue, textcolor=color.white, style=label.style_label_left)
+    tpLabel := label.new(bar_index + box_offset + 6, tpPrice, "TP: " + str.tostring(tpPrice, "#.##"), 
+         color=color.green, textcolor=color.white, style=label.style_label_left)
+    slLabel := label.new(bar_index + box_offset + 6, slPrice, "SL: " + str.tostring(slPrice, "#.##"), 
+         color=color.red, textcolor=color.white, style=label.style_label_left)
+
+// Exit conditions
+strategy.exit("Exit Long", "Long", limit=tpPrice, stop=slPrice)
+strategy.exit("Exit Short", "Short", limit=tpPrice, stop=slPrice)
+
+// Plot Indicators
+plot(ma9, color=color.new(color.blue, 0), title="Fast MA", linewidth=2)
+plot(ma21, color=color.new(color.red, 0), title="Slow MA", linewidth=2)
+
+// RSI Background for reference
+hline(rsiOverbought, "RSI Overbought", color=color.red, linestyle=hline.style_dashed)
+hline(rsiOversold, "RSI Oversold", color=color.green, linestyle=hline.style_dashed)
+plot(rsi, title="RSI", color=color.new(color.purple, 50), display=display.none)

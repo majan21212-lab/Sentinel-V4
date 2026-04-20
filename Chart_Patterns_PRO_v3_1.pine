@@ -1,0 +1,322 @@
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// CHART PATTERNS PRO v3.1 — The Jewel Elite (Pine Script v6)
+// Created by Antigravity (Advanced Agentic Coding)
+// UPDATED: Fixed Syntax CE10156 & Standardized Logic
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+//@version=6
+strategy("Chart Patterns PRO v3.1 (The Jewel Elite)", 
+     overlay=true, 
+     initial_capital=1000, 
+     currency=currency.USD,
+     default_qty_type=strategy.percent_of_equity, 
+     default_qty_value=10, 
+     max_lines_count=500, 
+     max_labels_count=500, 
+     max_boxes_count=100,
+     process_orders_on_close=true)
+
+// ── Types ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+type TradeInfo
+    string  name
+    float   entry
+    float   sl
+    float   tp1
+    float   tp2
+    int     direction
+    float   score
+    bool    is_active
+
+type WaterfallSignal
+    int      direction
+    float    start_price
+    float    end_price
+    float    velocity
+    float    volume_surge
+    int      duration
+    bool     is_confirmed
+    float    exhaustion_level
+    int      start_bar
+
+// ── Groups & Inputs ────────────────────────────────────────────────────────────────────────────────────────────────
+G_CON    = "💎 The Jewel Confluence Engine"
+G_RISK   = "🛡️ Risk & Execution"
+G_PAT    = "📊 Pattern Priorities"
+G_SEC    = "🕯️ Secondary Patterns"
+G_WATER  = "🌊 Waterfall Signals (UPDATED)"
+G_DISP   = "🎨 Aesthetics & UI"
+
+i_con_ema  = input.bool(true,  "Trend Filter (EMA 200)", group=G_CON)
+i_con_rsi  = input.bool(true,  "Momentum Filter (RSI)", group=G_CON)
+i_con_vol  = input.bool(true,  "Institutional Volume Filter", group=G_CON)
+i_con_sr   = input.bool(true,  "S/R Liquidity Proximity", group=G_CON)
+i_con_min  = input.float(60.0, "Min Confluence Score (%)", minval=0, maxval=100, step=5, group=G_CON)
+
+i_risk_pct = input.float(1.0,  "Risk per Trade (%)", minval=0.1, maxval=10.0, step=0.1, group=G_RISK)
+i_tp1_rr   = input.float(1.0,  "TP1 Risk:Reward", minval=0.5, maxval=5.0, step=0.1, group=G_RISK)
+i_tp2_rr   = input.float(2.0,  "TP2 Risk:Reward", minval=1.0, maxval=10.0, step=0.5, group=G_RISK)
+i_trail    = input.bool(true,  "Enable Trailing Stop", group=G_RISK)
+
+i_pat_ch   = input.bool(true,  "Cup and Handle", group=G_PAT)
+i_pat_hs   = input.bool(true,  "Head and Shoulders", group=G_PAT)
+i_pat_tri  = input.bool(true,  "Triangles (Sym/Asc/Desc)", group=G_PAT)
+i_pat_rect = input.bool(true,  "Horizontal Congestion", group=G_PAT)
+
+i_sec_cndl = input.bool(true,  "Candlestick Patterns (Engulfing/Harami)", group=G_SEC)
+i_sec_shrt = input.bool(true,  "Short-Term Patterns (Gaps/NR7)", group=G_SEC)
+
+i_water_enable    = input.bool(true, "🌊 Enable Waterfall Signals", group=G_WATER)
+i_water_min_bars  = input.int(3, "Minimum Waterfall Duration (bars)", minval=2, maxval=10, group=G_WATER)
+i_water_max_bars  = input.int(8, "Maximum Waterfall Duration (bars)", minval=3, maxval=20, group=G_WATER)
+i_water_velo_min  = input.float(0.5, "Minimum Velocity (% per bar)", minval=0.2, maxval=2.0, step=0.1, group=G_WATER)
+i_water_vol_mult  = input.float(1.5, "Minimum Volume Multiplier", minval=1.2, maxval=3.0, step=0.1, group=G_WATER)
+i_water_rsi_ext   = input.bool(true, "Require RSI Extreme (<35 or >65)", group=G_WATER)
+i_water_retrace   = input.bool(true, "Require Pre-Waterfall Retracement", group=G_WATER)
+
+i_show_tbl = input.bool(true,  "Show Glassmorphism Dashboard", group=G_DISP)
+i_show_lbl = input.bool(true,  "Show Institutional Labels", group=G_DISP)
+i_col_bull = input.color(#00E676, "Bullish Color", group=G_DISP)
+i_col_bear = input.color(#FF1744, "Bearish Color", group=G_DISP)
+i_water_col = input.color(#7C4DFF, "Waterfall Signal Color", group=G_DISP)
+
+// ── Technical Utilities ────────────────────────────────────────────────────────────────────────────────────────────
+atr     = ta.atr(14)
+rsi     = ta.rsi(close, 14)
+ema200  = ta.ema(close, 200)
+vol_avg = ta.sma(volume, 20)
+vol_ok  = volume > vol_avg * 1.3
+
+f_to_ticks(float price_dist) =>
+    math.round(price_dist / syminfo.mintick)
+
+// --- Pivot Array Management ---
+MAX_PIVOTS = 20
+var int[]   phi = array.new_int(0)
+var float[] phv = array.new_float(0)
+var int[]   pli = array.new_int(0)
+var float[] plv = array.new_float(0)
+
+ph = ta.pivothigh(high, 5, 5)
+pl = ta.pivotlow(low, 5, 5)
+
+if not na(ph)
+    array.unshift(phi, bar_index - 5)
+    array.unshift(phv, ph)
+    if array.size(phi) > MAX_PIVOTS
+        array.pop(phi)
+        array.pop(phv)
+
+if not na(pl)
+    array.unshift(pli, bar_index - 5)
+    array.unshift(plv, pl)
+    if array.size(pli) > MAX_PIVOTS
+        array.pop(pli)
+        array.pop(plv)
+
+// ── Confluence Engine ─────────────────────────────────────────────────────────────────────────────────────────────
+f_get_confluence_score(bool is_bull) =>
+    float score = 0.0
+    bool trend_ok = is_bull ? close > ema200 : close < ema200
+    if trend_ok or not i_con_ema
+        score := score + 25.0
+    bool rsi_ok = is_bull ? (rsi > 40 and rsi < 75) : (rsi < 60 and rsi > 25)
+    if rsi_ok or not i_con_rsi
+        score := score + 25.0
+    if vol_ok or not i_con_vol
+        score := score + 25.0
+    float last_pivot = is_bull ? (array.size(plv) > 0 ? array.get(plv, 0) : na) : (array.size(phv) > 0 ? array.get(phv, 0) : na)
+    bool sr_ok = not na(last_pivot) and math.abs(close - last_pivot) < atr * 2.0
+    if sr_ok or not i_con_sr
+        score := score + 25.0
+    score
+
+// ── WATERFALL DETECTION ENGINE ─────────────────────────────────────────────────────────────────────────────────────
+f_detect_waterfall() =>
+    WaterfallSignal ws = na
+    if i_water_enable
+        int lookback = i_water_max_bars
+        float total_vol = 0.0
+        bool all_bullish = true
+        bool all_bearish = true
+        for i = 0 to lookback - 1
+            total_vol := total_vol + volume[i]
+            if close[i] <= open[i]
+                all_bullish := false
+            if close[i] >= open[i]
+                all_bearish := false
+        float avg_vol = total_vol / lookback
+        float volume_ratio = avg_vol / vol_avg
+        float price_change_pct = (close - close[lookback]) / close[lookback] * 100
+        float avg_velocity = math.abs(price_change_pct) / lookback
+        bool has_volume_surge = volume_ratio >= i_water_vol_mult
+        bool has_velocity = avg_velocity >= i_water_velo_min
+        bool has_duration = lookback >= i_water_min_bars
+        bool has_rsi_extreme = i_water_rsi_ext ? (rsi <= 35 or rsi >= 65) : true
+        float range_before = (high[lookback] - low[lookback]) / close[lookback] * 100
+        bool has_retracement = i_water_retrace ? (range_before <= 2.0) : true
+        if all_bullish and price_change_pct > 0 and has_volume_surge and has_velocity and has_duration and has_rsi_extreme and has_retracement
+            ws := WaterfallSignal.new(1, close[lookback], close, avg_velocity, volume_ratio, lookback, true, close[lookback] - atr*2, bar_index - lookback)
+        if all_bearish and price_change_pct < 0 and has_volume_surge and has_velocity and has_duration and has_rsi_extreme and has_retracement
+            ws := WaterfallSignal.new(-1, close[lookback], close, avg_velocity, volume_ratio, lookback, true, close[lookback] + atr*2, bar_index - lookback)
+    ws
+
+// ── Execute Trade Method ──────────────────────────────────────────────────────────────────────────────────────────
+f_execute_trade(TradeInfo trade) =>
+    if trade.score >= i_con_min and barstate.isconfirmed
+        float risk_amt = strategy.equity * (i_risk_pct / 100)
+        float sl_dist  = math.abs(trade.entry - trade.sl)
+        float qty      = sl_dist > 0 ? risk_amt / sl_dist : na
+        if not na(qty)
+            string id = trade.name + "_" + str.tostring(bar_index)
+            strategy.entry(id, trade.direction == 1 ? strategy.long : strategy.short, qty=qty)
+            strategy.exit(id + "_X1", id, qty_percent=50, stop=trade.sl, limit=trade.tp1, comment="TP1")
+            float t_dist = atr * 2
+            int t_pts = i_trail ? f_to_ticks(t_dist) : 0
+            strategy.exit(id + "_X2", id, qty_percent=100, stop=trade.sl, limit=trade.tp2, comment="TP2", trail_points=i_trail ? t_pts : na)
+            if i_show_lbl
+                color lbl_col = trade.direction == 1 ? i_col_bull : i_col_bear
+                float y_loc = trade.direction == 1 ? low - atr * 2.0 : high + atr * 2.0
+                label.new(bar_index, y_loc, trade.name + "\n" + str.tostring(math.round(trade.score, 1)) + "% Conf", style=trade.direction == 1 ? label.style_label_up : label.style_label_down, color=lbl_col, textcolor=color.white, size=size.small)
+                int ext = bar_index + 7
+                line.new(bar_index, trade.entry, ext, trade.entry, color=lbl_col, style=line.style_dotted, width=2)
+                line.new(bar_index, trade.sl, ext, trade.sl, color=color.new(color.gray, 30), style=line.style_dotted, width=2)
+                line.new(bar_index, trade.tp1, ext, trade.tp1, color=color.new(i_col_bull, 30), style=line.style_dotted, width=2)
+                line.new(bar_index, trade.tp2, ext, trade.tp2, color=color.new(i_col_bull, 30), style=line.style_dotted, width=2)
+                box.new(bar_index - 5, trade.entry, bar_index, trade.sl, bgcolor=color.new(lbl_col, 90), border_color=lbl_col, border_width=1)
+
+// ── WATERFALL EXECUTION HANDLER ───────────────────────────────────────────────────────────────────────────────────
+f_execute_waterfall(WaterfallSignal wf) =>
+    if not na(wf) and wf.is_confirmed and barstate.isconfirmed
+        float entry_price = wf.end_price
+        float sl_distance = atr * 1.5
+        float dynamic_sl = wf.direction == 1 ? (entry_price - math.max(sl_distance, atr * (wf.velocity / 0.5))) : (entry_price + math.max(sl_distance, atr * (wf.velocity / 0.5)))
+        float tp1_dist = math.abs(entry_price - dynamic_sl) * i_tp1_rr
+        float tp2_dist = math.abs(entry_price - dynamic_sl) * i_tp2_rr
+        float tp1 = wf.direction == 1 ? entry_price + tp1_dist : entry_price - tp1_dist
+        float tp2 = wf.direction == 1 ? entry_price + tp2_dist : entry_price - tp2_dist
+        float score = f_get_confluence_score(wf.direction == 1)
+        score := math.min(100, score + (wf.velocity * 10) + (wf.volume_surge * 5))
+        if score >= i_con_min
+            string signal_name = wf.direction == 1 ? "🌊 BULLISH WATERFALL" : "🌊 BEARISH WATERFALL"
+            float risk_amt = strategy.equity * (i_risk_pct / 100)
+            float sl_dist = math.abs(entry_price - dynamic_sl)
+            float qty = sl_dist > 0 ? risk_amt / sl_dist : na
+            if not na(qty)
+                string id = signal_name + "_" + str.tostring(bar_index)
+                strategy.entry(id, wf.direction == 1 ? strategy.long : strategy.short, qty=qty)
+                strategy.exit(id + "_X1", id, qty_percent=50, stop=dynamic_sl, limit=tp1, comment="WF_TP1")
+                int t_pts = i_trail ? f_to_ticks(atr * 2) : 0
+                strategy.exit(id + "_X2", id, qty_percent=100, stop=dynamic_sl, limit=tp2, comment="WF_TP2", trail_points=i_trail ? t_pts : na)
+                if i_show_lbl
+                    color wf_color = wf.direction == 1 ? i_col_bull : i_col_bear
+                    float label_y = wf.direction == 1 ? low - atr*3 : high + atr*3
+                    label.new(bar_index, label_y, signal_name + "\nConfidence: " + str.tostring(math.round(score, 1)) + "%", style=wf.direction == 1 ? label.style_label_up : label.style_label_down, color=color.new(wf_color, 80), textcolor=color.white, size=size.large)
+                    line.new(wf.start_bar, wf.start_price, bar_index, wf.end_price, color=color.new(i_water_col, 60), width=3, style=line.style_solid)
+                    int ext = bar_index + 7
+                    line.new(bar_index, entry_price, ext, entry_price, color=wf_color, style=line.style_dotted, width=2)
+                    line.new(bar_index, dynamic_sl, ext, dynamic_sl, color=color.new(color.gray, 30), style=line.style_dotted, width=2)
+                    line.new(bar_index, tp1, ext, tp1, color=color.new(i_col_bull, 40), style=line.style_dotted, width=2)
+                    line.new(bar_index, tp2, ext, tp2, color=color.new(i_col_bull, 60), style=line.style_dotted, width=2)
+
+// ── MAIN LOOP ──────────────────────────────────────────────────────────────────────────────────────────────────────
+WaterfallSignal detected_waterfall = f_detect_waterfall()
+if not na(detected_waterfall) and i_water_enable
+    f_execute_waterfall(detected_waterfall)
+
+float tol = atr * 0.5
+var float cut_lip_val = na
+var int   cup_start_i = na
+var bool  in_cup_find = false
+
+if i_pat_ch
+    if not na(ph) and not in_cup_find and close > ema200
+        cut_lip_val := ph
+        cup_start_i := bar_index - 5
+        in_cup_find := true
+    if in_cup_find
+        if low < cut_lip_val - (atr * 10)
+            in_cup_find := false
+        bool near_lip = math.abs(high - cut_lip_val) < tol * 2
+        bool handle_zone = bar_index - cup_start_i > 15 and bar_index - cup_start_i < 150
+        if near_lip and handle_zone
+            float h_low = low
+            for i = 0 to 9
+                if low[i] < h_low
+                    h_low := low[i]
+            if h_low > cut_lip_val - (atr * 4) and close > cut_lip_val and vol_ok
+                f_execute_trade(TradeInfo.new("Cup & Handle", close, h_low - atr, close + (close - h_low)*i_tp1_rr, close + (close - h_low)*i_tp2_rr, 1, f_get_confluence_score(true), true))
+                in_cup_find := false
+
+if i_pat_hs and array.size(phv) >= 3
+    float l_sh = array.get(phv, 2)
+    float head = array.get(phv, 1)
+    float r_sh = array.get(phv, 0)
+    int l_xi = array.get(phi, 2)
+    int r_xi = array.get(phi, 0)
+    if head > l_sh and head > r_sh and math.abs(l_sh - r_sh) < tol * 3 and bar_index - r_xi < 30
+        float neck = low
+        for i = 0 to (bar_index - l_xi)
+            if low[i] < neck
+                neck := low[i]
+        if close < neck and vol_ok
+            f_execute_trade(TradeInfo.new("Head & Shoulders", close, head + atr, close - (head - close)*i_tp1_rr, close - (head - close)*i_tp2_rr, -1, f_get_confluence_score(false), true))
+
+if i_pat_tri and array.size(phv) >= 2
+    float h1 = array.get(phv, 0)
+    float h2 = array.get(phv, 1)
+    if math.abs(h1 - h2) < tol and bar_index - array.get(phi, 0) < 30
+        float neck = low
+        for i = 0 to (bar_index - array.get(phi, 1))
+            if low[i] < neck
+                neck := low[i]
+        if close < neck and vol_ok
+            f_execute_trade(TradeInfo.new("Double Top", close, math.max(h1,h2) + atr, close - atr, close - atr*2, -1, f_get_confluence_score(false), true))
+
+if i_pat_tri and array.size(plv) >= 2
+    float l1 = array.get(plv, 0)
+    float l2 = array.get(plv, 1)
+    if math.abs(l1 - l2) < tol and bar_index - array.get(pli, 0) < 30
+        float neck = high
+        for i = 0 to (bar_index - array.get(pli, 1))
+            if high[i] > neck
+                neck := high[i]
+        if close > neck and vol_ok
+            f_execute_trade(TradeInfo.new("Double Bottom", close, math.min(l1,l2) - atr, close + atr, close + atr*2, 1, f_get_confluence_score(true), true))
+
+var float rect_t = na
+var float rect_b = na
+if i_pat_rect
+    if not na(ph)
+        rect_t := ph
+    if not na(pl)
+        rect_b := pl
+    if not na(rect_t) and not na(rect_b) and close > rect_t and vol_ok
+        f_execute_trade(TradeInfo.new("Rectangle BO", close, rect_b - atr, close + atr, close + atr*2, 1, f_get_confluence_score(true), true))
+
+if i_sec_cndl
+    bool bull_e = close > open and close[1] < open[1] and close > open[1] and open < close[1]
+    if bull_e and vol_ok
+        f_execute_trade(TradeInfo.new("Bull Engulfing", close, low - atr, close + atr, close + atr*2, 1, f_get_confluence_score(true), true))
+
+// Trade Confirmation Labels
+var int last_closed = 0
+if strategy.closedtrades > last_closed
+    last_closed := strategy.closedtrades
+    float pnl = strategy.closedtrades.profit(strategy.closedtrades - 1)
+    bool is_p = pnl > 0
+    string msg = (is_p ? "✔ SUCCESS (" : "✘ FAILED (") + str.tostring(math.round(pnl, 2)) + ")"
+    float y_pos = strategy.closedtrades.exit_price(strategy.closedtrades - 1)
+    color c_conf = is_p ? color.new(i_col_bull, 20) : color.new(i_col_bear, 20)
+    label.new(bar_index, is_p ? y_pos + atr*2.5 : y_pos - atr*2.5, msg, color=c_conf, textcolor=color.white, style=is_p ? label.style_label_down : label.style_label_up, size=size.small)
+
+var table dash = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 30), border_width=1, border_color=color.new(color.gray, 50))
+if barstate.islast and i_show_tbl
+    table.cell(dash, 0, 0, "💎 THE JEWEL Elite v3.1", text_color=color.white, bgcolor=color.new(#1A237E, 10))
+    table.cell(dash, 0, 1, "Win Rate", text_color=#BDBDBD)
+    table.cell(dash, 1, 1, str.tostring(math.round(strategy.closedtrades > 0 ? (strategy.wintrades / strategy.closedtrades) * 100 : 0, 2)) + "%", text_color=#00E5FF)
+    table.cell(dash, 0, 2, "Net Profit", text_color=#BDBDBD)
+    table.cell(dash, 1, 2, "$" + str.tostring(math.round(strategy.netprofit, 2)), text_color=strategy.netprofit >= 0 ? #69F0AE : #FF5252)
+
+bgcolor(close > ema200 ? color.new(i_col_bull, 97) : color.new(i_col_bear, 97))
+plot(ema200, "EMA 200", color=color.new(color.gray, 50), linewidth=2)
+plotshape(not na(ph) ? ph : na, "PH", shape.triangledown, location.abovebar, color=i_col_bear, size=size.tiny, offset=-5)
+plotshape(not na(pl) ? pl : na, "PL", shape.triangleup, location.belowbar, color=i_col_bull, size=size.tiny, offset=-5)

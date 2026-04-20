@@ -1,0 +1,213 @@
+// This Pine Script™ source code is subject to the terms of the Mozilla Public License 2.0
+// © Ultimate Master Confluence Institutional — UNIVERSAL v7.1
+
+//@version=5
+indicator("Ultimate Master Confluence Universal [v7.1]", overlay=true, max_boxes_count=100, max_lines_count=150, max_labels_count=200)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 1 — UNIVERSAL PRESET ENGINE
+// ═══════════════════════════════════════════════════════════
+
+grp_preset = "🌎 Universal Market Selection"
+i_mktType  = input.string("Auto Detect", "Market Preset", options=["Auto Detect", "Indices (US100/DE40)", "Metals (Gold/Silver)", "Crypto (BTC/ETH)", "Forex (Majors)", "Stocks/Custom"], group=grp_preset)
+
+// --- Auto-Detection Logic ---
+var string mkt = i_mktType
+if i_mktType == "Auto Detect"
+    if str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD") or str.contains(syminfo.ticker, "XAG")
+        mkt := "Metals (Gold/Silver)"
+    else if str.contains(syminfo.ticker, "US100") or str.contains(syminfo.ticker, "NAS100") or str.contains(syminfo.ticker, "NDX") or str.contains(syminfo.ticker, "DAX") or str.contains(syminfo.ticker, "DE40")
+        mkt := "Indices (US100/DE40)"
+    else if str.contains(syminfo.ticker, "BTC") or str.contains(syminfo.ticker, "ETH") or str.contains(syminfo.ticker, "USDT") or syminfo.type == "crypto"
+        mkt := "Crypto (BTC/ETH)"
+    else if syminfo.type == "forex"
+        mkt := "Forex (Majors)"
+    else
+        mkt := "Stocks/Custom"
+
+// --- Adaptive Parameter Scaling ---
+// Base values that adjust per-market
+int   p_swing   = mkt == "Forex (Majors)" ? 5 : mkt == "Crypto (BTC/ETH)" ? 12 : 8
+float p_atrM    = mkt == "Forex (Majors)" ? 1.5 : mkt == "Crypto (BTC/ETH)" ? 3.5 : mkt == "Metals (Gold/Silver)" ? 3.0 : 2.0
+bool  p_useTime = mkt != "Crypto (BTC/ETH)" // Crypto avoids time-based filters
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 2 — INPUTS & FILTERS
+// ═══════════════════════════════════════════════════════════
+
+grp_sessions = "🕒 Session / Volatility Filter"
+i_useSessions = input.bool(true, "Enable Time/Vol Filter", group=grp_sessions)
+i_lonSession  = input.session("0700-1100", "London Kill Zone", group=grp_sessions)
+i_nySession   = input.session("1300-1700", "New York Kill Zone", group=grp_sessions)
+i_volFilter   = input.bool(true, "Crypto Volatility Filter (>20d Avg)", group=grp_sessions, tooltip="For Crypto, signals only fire when volume > 20d Average.")
+
+grp_mtf   = "🌓 Institutional Bias (MTF)"
+i_htf1    = input.timeframe("240",  "Macro Trend (H4)",    group=grp_mtf)
+i_htf2    = input.timeframe("60",   "Intermediate (H1)",  group=grp_mtf)
+i_reqMTF  = input.bool(true, "Require Full Alignment",    group=grp_mtf)
+
+grp_struct = "🏗️ Market Structure & SMC"
+i_swing   = input.int(8,     "Manual Override: Swing Pts", group=grp_struct, tooltip="Set to 0 to use Adaptive Auto-Tuning.")
+final_swing = i_swing == 0 ? p_swing : i_swing
+
+i_tpM1    = input.float(1.5, "TP1 Reward Ratio",           group=grp_struct, step=0.1)
+i_tpM2    = input.float(3.0, "TP2 Reward Ratio",           group=grp_struct, step=0.1)
+i_reqFVG  = input.bool(true, "Require FVG Displacement",   group=grp_struct)
+i_trail   = input.bool(true, "Enable Trailing Stop (Hull)",group=grp_struct)
+
+grp_ui    = "🎨 Universal UI"
+i_showD   = input.bool(true, "Show Dashboard",             group=grp_ui)
+i_risk    = input.float(1.0, "Risk Per Trade (%)",         group=grp_ui)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 3 — CORE LOGIC & VOLATILITY
+// ═══════════════════════════════════════════════════════════
+
+// --- Session Logic ---
+isLon = not na(time(timeframe.period, i_lonSession, "UTC"))
+isNY  = not na(time(timeframe.period, i_nySession, "UTC"))
+
+// --- Volatility Filter (User Request) ---
+volAvg = ta.sma(volume, 20)
+isVolActive = volume > volAvg
+isKillZone = not i_useSessions or (p_useTime ? (isLon or isNY) : isVolActive)
+
+// --- MTF Engine (Anti-Repaint) ---
+htf1_ema = request.security(syminfo.tickerid, i_htf1, ta.ema(close, 200), lookahead=barmerge.lookahead_off)
+htf1_close = request.security(syminfo.tickerid, i_htf1, close[1], lookahead=barmerge.lookahead_off)
+htf1_bull = htf1_close > htf1_ema
+htf1_bear = htf1_close < htf1_ema
+
+htf2_ema = request.security(syminfo.tickerid, i_htf2, ta.ema(close, 50), lookahead=barmerge.lookahead_off)
+htf2_close = request.security(syminfo.tickerid, i_htf2, close[1], lookahead=barmerge.lookahead_off)
+htf2_bull = htf2_close > htf2_ema
+htf2_bear = htf2_close < htf2_ema
+
+inst_bullish = htf1_bull and htf2_bull
+inst_bearish = htf1_bear and htf2_bear
+
+// --- Local TF Indicators ---
+atr      = ta.atr(14)
+baseline = ta.hma(close, 21)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 4 — SMC ENGINE (MSS + FVG)
+// ═══════════════════════════════════════════════════════════
+
+ph = ta.pivothigh(high, final_swing, final_swing)
+pl = ta.pivotlow(low,   final_swing, final_swing)
+
+var float lastSH = na
+var float lastSL = na
+if not na(ph)
+    lastSH := ph
+if not na(pl)
+    lastSL := pl
+
+// --- Liquidity Sweep ---
+bullSweep = not na(lastSL) and low < lastSL and close > lastSL
+bearSweep = not na(lastSH) and high > lastSH and close < lastSH
+
+var bool sweepPendingLong  = false
+var bool sweepPendingShort = false
+var float triggerLevel     = na
+
+if bullSweep
+    sweepPendingLong := true
+    triggerLevel     := lastSH
+if bearSweep
+    sweepPendingShort := true
+    triggerLevel      := lastSL
+
+// --- Market Structure Shift (MSS) ---
+is_mss_long  = sweepPendingLong  and ta.crossover(close, triggerLevel)
+is_mss_short = sweepPendingShort and ta.crossunder(close, triggerLevel)
+
+// --- FVG Displacement ---
+bullFVG = low > high[2] and close[1] > high[2]
+bearFVG = high < low[2] and close[1] < low[2]
+
+// Reset logic
+if is_mss_long or low < lastSL - (atr * 2)
+    sweepPendingLong := false
+if is_mss_short or high > lastSH + (atr * 2)
+    sweepPendingShort := false
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 5 — FINAL CONFLUENCE & TRAILING STOP
+// ═══════════════════════════════════════════════════════════
+
+isDiscount = close < ((lastSH + lastSL) / 2)
+isPremium  = close > ((lastSH + lastSL) / 2)
+
+longCond  = is_mss_long  and isKillZone and isDiscount and (not i_reqMTF or inst_bullish) and (not i_reqFVG or ta.barssince(bullFVG) < 5)
+shortCond = is_mss_short and isKillZone and isPremium  and (not i_reqMTF or inst_bearish) and (not i_reqFVG or ta.barssince(bearFVG) < 5)
+
+// --- Trailing Stop Logic (User Request) ---
+var float trailSL = na
+var bool  inLong  = false
+var bool  inShort = false
+
+if longCond
+    inLong  := true
+    inShort := false
+    trailSL := lastSL - (atr * 0.5)
+if shortCond
+    inLong  := false
+    inShort := true
+    trailSL := lastSH + (atr * 0.5)
+
+// Update Trailing SL using Hull Baseline
+if i_trail and barstate.isconfirmed
+    if inLong
+        trailSL := math.max(trailSL, baseline - (atr * 0.5))
+        if close < trailSL
+            inLong  := false
+            trailSL := na
+    if inShort
+        trailSL := math.min(trailSL, baseline + (atr * 0.5))
+        if close > trailSL
+            inShort := false
+            trailSL := na
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 6 — SIGNALS & DASHBOARD
+// ═══════════════════════════════════════════════════════════
+
+plotshape(longCond,  "Long Entry",  shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.normal)
+plotshape(shortCond, "Short Entry", shape.triangledown, location.abovebar, color.new(color.red, 0),  size=size.normal)
+
+// Visual Trailing SL
+plot(trailSL, "Trailing SL", color=inLong ? color.new(color.lime, 50) : inShort ? color.new(color.red, 50) : na, style=plot.style_linebr, linewidth=2)
+
+// --- Universal Dashboard ---
+var table dash = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 80), border_color=color.new(color.gray, 80), border_width=1)
+
+if barstate.islast and i_showD
+    table.cell(dash, 0, 0, "Universal Mode:", text_color=color.white)
+    table.cell(dash, 1, 0, mkt, text_color=color.aqua)
+    
+    table.cell(dash, 0, 1, "Status:", text_color=color.white)
+    table.cell(dash, 1, 1, isKillZone ? "TRADING ACTIVE ✅" : "WAITING FILTER ❌", text_color=isKillZone ? color.lime : color.red)
+    
+    table.cell(dash, 0, 2, "Vol Filter:", text_color=color.white)
+    table.cell(dash, 1, 2, isVolActive ? "HIGH 💥" : "LOW", text_color=isVolActive ? color.yellow : color.gray)
+    
+    table.cell(dash, 0, 3, "Inst. Bias:", text_color=color.white)
+    table.cell(dash, 1, 3, inst_bullish ? "BULL ▲" : inst_bearish ? "BEAR ▼" : "NEUTRAL", text_color=inst_bullish ? color.lime : inst_bearish ? color.red : color.gray)
+    
+    table.cell(dash, 0, 4, "Adaptive Swing:", text_color=color.white)
+    table.cell(dash, 1, 4, str.tostring(final_swing), text_color=color.white)
+    
+    table.cell(dash, 0, 5, "ATR Pad:", text_color=color.white)
+    table.cell(dash, 1, 5, str.tostring(p_atrM) + "x", text_color=color.white)
+
+// ═══════════════════════════════════════════════════════════
+// ▶ SECTION 7 — ALERTS
+// ═══════════════════════════════════════════════════════════
+if longCond
+    alert("⚡ UNIVERSAL LONG: " + syminfo.ticker + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+if shortCond
+    alert("⚡ UNIVERSAL SHORT: " + syminfo.ticker + " @ " + str.tostring(close, format.mintick), alert.freq_once_per_bar_close)
+if i_trail and ((inLong[1] and not inLong) or (inShort[1] and not inShort))
+    alert("🛡️ TRAILING SL EXIT: " + syminfo.ticker, alert.freq_once_per_bar_close)

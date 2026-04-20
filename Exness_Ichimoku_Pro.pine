@@ -1,0 +1,84 @@
+//@version=5
+strategy("Exness Ichimoku Pro (Long/Short Labels)", overlay=true, initial_capital=1000)
+
+// --- إعدادات إيشيموكو ---
+tenkan = math.avg(ta.lowest(9), ta.highest(9))
+kijun  = math.avg(ta.lowest(26), ta.highest(26))
+senkouA = math.avg(tenkan, kijun)
+senkouB = math.avg(ta.lowest(52), ta.highest(52))
+
+// رسم السحابة
+p1 = plot(senkouA, offset=26, color=color.new(color.green, 80), title="Lead A")
+p2 = plot(senkouB, offset=26, color=color.new(color.red, 80), title="Lead B")
+fill(p1, p2, color=senkouA > senkouB ? color.new(color.green, 90) : color.new(color.red, 90))
+
+// --- تأكيد الإتجاه (EMA 200) ---
+// تأكيد إضافي كما طلب المستخدم
+ema200 = ta.ema(close, 200)
+plot(ema200, color=color.gray, title="EMA 200 Trend Filter", linewidth=2)
+
+// --- تحديد الصفقات (Updated Logic) ---
+// القيم الحالية للسحابة (التي تم رسمها قبل 26 شمعة)
+leadA = senkouA[26]
+leadB = senkouB[26]
+cloudTop = math.max(leadA, leadB)
+cloudBottom = math.min(leadA, leadB)
+
+// شروط الشراء
+bool isLongTrend       = close > ema200        // السعر فوق متوسط 200
+bool isLongCloud       = close > cloudTop      // السعر فوق السحابة
+bool isLongCrossTrigger= ta.crossover(tenkan, kijun) // تقاطع تنكان وكيجون الآن
+bool isLongState       = tenkan > kijun        // التنكان فوق الكيجون (حالة إيجابية)
+bool isLongBreakout    = ta.crossover(close, cloudTop) // اختراق السحابة الآن
+
+// الدخول: إما تقاطع الآن والسعر فوق السحابة، أو اختراق السحابة الآن والتقاطع موجود
+longCondition = isLongTrend and ( (isLongCrossTrigger and isLongCloud) or (isLongBreakout and isLongState) )
+
+// شروط البيع
+bool isShortTrend       = close < ema200       // السعر تحت متوسط 200
+bool isShortCloud       = close < cloudBottom  // السعر تحت السحابة
+bool isShortCrossTrigger= ta.crossunder(tenkan, kijun) // تقاطع سلبي الآن
+bool isShortState       = tenkan < kijun       // التنكان تحت الكيجون
+bool isShortBreakout    = ta.crossunder(close, cloudBottom) // كسر السحابة للأسفل
+
+// الدخول للبيع
+shortCondition = isShortTrend and ( (isShortCrossTrigger and isShortCloud) or (isShortBreakout and isShortState) )
+
+// مسافة الملصقات بناءً على تذبذب السوق
+dist = ta.atr(14) * 2
+
+// تنفيذ صفقة Long
+if (longCondition and strategy.position_size == 0)
+    float sl = kijun
+    float tp = close + (close - sl) * 1.5
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Exit Long", "Long", stop=sl, limit=tp)
+    
+    label.new(bar_index, low - dist, 
+         text="🚀 LONG\nEntry: " + str.tostring(close, "#.#####") + "\nSL: " + str.tostring(sl, "#.#####") + "\nTP: " + str.tostring(tp, "#.#####"), 
+         color=color.blue, style=label.style_label_up, textcolor=color.white)
+
+// تنفيذ صفقة Short
+if (shortCondition and strategy.position_size == 0)
+    float sl = kijun
+    float tp = close - (sl - close) * 1.5
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Exit Short", "Short", stop=sl, limit=tp)
+    
+    label.new(bar_index, high + dist, 
+         text="📉 SHORT\nEntry: " + str.tostring(close, "#.#####") + "\nSL: " + str.tostring(sl, "#.#####") + "\nTP: " + str.tostring(tp, "#.#####"), 
+         color=color.orange, style=label.style_label_down, textcolor=color.white)
+
+// --- مربع النتيجة (Win/Loss Tracker) ---
+if (strategy.closedtrades > strategy.closedtrades[1])
+    bool isWin = strategy.closedtrades.profit(strategy.closedtrades - 1) > 0
+    string tradeDir = strategy.closedtrades.size(strategy.closedtrades - 1) > 0 ? "LONG" : "SHORT"
+    string resultText = isWin ? "SUCCESS ✅" : "FAILED ❌"
+    string reasonText = isWin ? "Reason: TP Hit" : "Reason: SL Hit"
+    color boxColor = isWin ? color.green : color.red
+    
+    label.new(bar_index, high + (dist * 6), 
+         text=resultText + "\nTrade: " + tradeDir + "\n" + reasonText, 
+         color=boxColor, 
+         textcolor=color.white, 
+         style=label.style_label_center)

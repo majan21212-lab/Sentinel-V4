@@ -1,0 +1,76 @@
+name: Build iOS Installer
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Jewel Elite (No Sign)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build App Bundle
+        run: |
+          cd iOSApp
+          # Create a dummy Info.plist if not exists (required for xcodebuild)
+          if [ ! -f Info.plist ]; then
+            cat <<EOF > Info.plist
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>CFBundleExecutable</key>
+              <string>JewelElite</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.sentinel.jewelelite</string>
+              <key>CFBundleName</key>
+              <string>JewelElite</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>MinimumOSVersion</key>
+              <string>15.0</string>
+              <key>UILaunchScreen</key>
+              <dict/>
+            </dict>
+            </plist>
+          EOF
+          fi
+
+          # Build using xcodebuild (targetting iOS)
+          # Since it's a Swift Package, we use -scheme and -destination
+          # Note: We build for a physical device architecture (Generic iOS Device)
+          # We don't sign here (-allowProvisioningUpdates is off, CODE_SIGNING_ALLOWED=NO)
+          xcodebuild build \
+            -scheme JewelElite \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR=build
+
+      - name: Create IPA Structure
+        run: |
+          mkdir -p Payload
+          # Find the .app and copy it to Payload for IPA packaging
+          cp -r iOSApp/build/JewelElite.app Payload/
+          zip -r JewelElite_Unsigned.ipa Payload
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradeBot_iOS_Installer
+          path: JewelElite_Unsigned.ipa
+          retention-days: 7
