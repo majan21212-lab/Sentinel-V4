@@ -30,6 +30,10 @@ class RiskEngine:
             self.config.max_open_positions = 10
             self.config.max_daily_loss_pct = 10.0
 
+    def validate_trade(self, signal, account: AccountStatus):
+        """Validates whether a new trade is allowed given current risk constraints."""
+        profile = self.config.active_profile
+
         # 1. Check Max Open Positions
         if account.open_positions >= self.config.max_open_positions:
             return False, f"Max {profile} open positions reached ({self.config.max_open_positions})."
