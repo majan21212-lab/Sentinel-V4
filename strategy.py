@@ -1,9 +1,58 @@
 import ccxt
 import pandas as pd
-import pandas_ta as ta
 import numpy as np
 from datetime import datetime
 from db_utils import get_db_connection
+
+# ── TA helper functions (replaces pandas_ta) ─────────────────────────────────
+def _ema(series, length):
+    return series.ewm(span=length, adjust=False).mean()
+
+def _sma(series, length):
+    return series.rolling(window=length).mean()
+
+def _hma(series, length):
+    import math
+    half = int(length / 2)
+    sqrt_len = int(math.sqrt(length))
+    wmah = series.ewm(span=half, adjust=False).mean()
+    wmal = series.ewm(span=length, adjust=False).mean()
+    diff = 2 * wmah - wmal
+    return diff.ewm(span=sqrt_len, adjust=False).mean()
+
+def _rsi(series, length=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1/length, min_periods=length).mean()
+    avg_loss = loss.ewm(alpha=1/length, min_periods=length).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+def _atr(high, low, close, length=14):
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    return tr.rolling(window=length).mean()
+
+def _mom(series, length):
+    return series - series.shift(length)
+
+def _vwap(high, low, close, volume):
+    tp = (high + low + close) / 3
+    cum_tp_vol = (tp * volume).cumsum()
+    cum_vol = volume.cumsum()
+    return cum_tp_vol / cum_vol
+
+def _bbands(close, length=20, std=2):
+    mid = close.rolling(window=length).mean()
+    band_std = close.rolling(window=length).std()
+    upper = mid + (band_std * std)
+    lower = mid - (band_std * std)
+    return pd.DataFrame({'BBM': mid, 'BBU': upper, 'BBL': lower})
+
+# ── Data Fetching ─────────────────────────────────────────────────────────────
 
 def fetch_data(symbol, timeframe='5m', limit=500):
     """
@@ -33,12 +82,12 @@ def calculate_indicators(df, symbol):
     df.sort_index(inplace=True)
 
     # 1. MTF Trend (Using EMA 200 as Proxy)
-    df['ema200'] = ta.ema(df['close'], length=200)
+    df['ema200'] = _ema(df['close'], 200)
     df['mtf_bull'] = df['close'] > df['ema200']
     df['mtf_bear'] = df['close'] < df['ema200']
 
     # 2. Hull Baseline (25)
-    df['baseline'] = ta.hma(df['close'], length=25)
+    df['baseline'] = _hma(df['close'], 25)
     df['bull_hull'] = df['close'] > df['baseline']
     df['bear_hull'] = df['close'] < df['baseline']
 
@@ -46,21 +95,21 @@ def calculate_indicators(df, symbol):
     vol_avg = df['volume'].rolling(20).mean()
     vol_std = df['volume'].rolling(20).std().replace(0, np.nan)
     df['vol_z'] = (df['volume'] - vol_avg) / vol_std
-    df['vol_spike'] = ta.ema(df['vol_z'].fillna(0), length=3) > 1.2
+    df['vol_spike'] = _ema(df['vol_z'].fillna(0), 3) > 1.2
 
     # 4. Momentum (TMO-style simplified)
-    osc = ta.mom(ta.sma(ta.sma(df['close'], 7), 7), 7)
+    osc = _mom(_sma(_sma(df['close'], 7), 7), 7)
     df['bull_mom'] = osc.diff() > 0
     df['bear_mom'] = osc.diff() < 0
 
     # 5. RSI (14)
-    df['rsi'] = ta.rsi(df['close'], length=14)
+    df['rsi'] = _rsi(df['close'], 14)
     df['bull_rsi'] = df['rsi'] > 50
     df['bear_rsi'] = df['rsi'] < 50
 
     # 6. VWAP (Requires timestamp index)
     try:
-        df['vwap'] = ta.vwap(df['high'], df['low'], df['close'], df['volume'])
+        df['vwap'] = _vwap(df['high'], df['low'], df['close'], df['volume'])
     except Exception as e:
         print(f"VWAP Error: {e}")
         df['vwap'] = df['close'] # Fallback
@@ -69,14 +118,11 @@ def calculate_indicators(df, symbol):
     df['bear_vwap'] = df['close'] < df['vwap']
 
     # 7. Bollinger Bands (20, 2)
-    bbands = ta.bbands(df['close'], length=20, std=2)
+    bbands = _bbands(df['close'], length=20, std=2)
     if bbands is not None:
-        # Use more robust way to find BBM/BBU/BBL columns
-        bbm_col = [c for c in bbands.columns if 'BBM' in c]
-        if bbm_col:
-            df['bb_mid'] = bbands[bbm_col[0]]
-            df['bull_bb'] = df['close'] > df['bb_mid']
-            df['bear_bb'] = df['close'] < df['bb_mid']
+        df['bb_mid'] = bbands['BBM']
+        df['bull_bb'] = df['close'] > df['bb_mid']
+        df['bear_bb'] = df['close'] < df['bb_mid']
 
     # 8. Liquidity Sweeps
     df['sw_high'] = df['high'].rolling(window=10, center=True).max()
@@ -136,7 +182,7 @@ def check_signals(df, symbol, req_score=7):
     short_cond = (short_pts >= req_score) and (current['close'] < current['baseline']) and (prev['close'] >= prev['baseline'])
 
     signal = None
-    atr = ta.atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
+    atr = _atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
 
     if long_cond:
         sl = current['close'] - (atr * 1.5)
