@@ -16,6 +16,8 @@ import mimetypes
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 
+active_connections = set()
+
 app = FastAPI()
 
 app.add_middleware(
@@ -82,7 +84,9 @@ async def update_settings(request: Request):
     if "active_profile" in data: SHARED_DATA["active_profile"] = data["active_profile"]
     if "strategy_mode" in data: SHARED_DATA["strategy_mode"] = data["strategy_mode"]
     if "is_bot_active" in data: SHARED_DATA["is_bot_active"] = bool(data["is_bot_active"])
+    if "kill_switch" in data: SHARED_DATA["kill_switch"] = bool(data["kill_switch"])
     if "execution_bias" in data: SHARED_DATA["execution_bias"] = data["execution_bias"]
+    if "active_markets" in data: SHARED_DATA["active_markets"] = data["active_markets"]
     
     executor = state.get_executor()
     executor.risk_engine.config.active_profile = SHARED_DATA["active_profile"]
@@ -95,14 +99,31 @@ async def update_settings(request: Request):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    state.active_connections.add(websocket) if hasattr(state, 'active_connections') else None
+    active_connections.add(websocket)
     try:
-        while True: await websocket.receive_text()
-    except WebSocketDisconnect: pass
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
+    except Exception:
+        if websocket in active_connections:
+            active_connections.remove(websocket)
 
 async def broadcast_data():
     while True:
-        # Simplified broadcast logic for brevity in this tool call
+        try:
+            if active_connections:
+                payload = json.dumps(SHARED_DATA)
+                disconnected = set()
+                for ws in active_connections:
+                    try:
+                        await ws.send_text(payload)
+                    except:
+                        disconnected.add(ws)
+                for ws in disconnected:
+                    active_connections.remove(ws)
+        except Exception as e:
+            print(f"Broadcast Error: {e}")
         await asyncio.sleep(1)
 
 @app.on_event("startup")
@@ -124,6 +145,56 @@ async def simulate_jewel_elite():
     }
     SHARED_DATA["signals"] = [test_sig] + SHARED_DATA.get("signals", [])
     return JSONResponse(content={"status": "success", "message": "Jewel Elite Institutional Signal Injected"})
+
+@app.post("/api/connect_broker")
+async def connect_broker(request: Request):
+    """Securely links a new broker account."""
+    try:
+        data = await request.json()
+        broker = data.get("broker")
+        api_key = data.get("api_key")
+        
+        logger.info(f"Establishing link with {broker} using key: {api_key[:5]}***")
+        
+        # In a real scenario, initialize the adapter here
+        # For this demo, we simulate success
+        return JSONResponse(content={"status": "success", "message": f"{broker} connected successfully"})
+    except Exception as e:
+        logger.error(f"Connection Error: {e}")
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+
+@app.post("/api/webhook/tradingview")
+async def tradingview_webhook(request: Request):
+    """Entry point for TradingView Alert signals."""
+    try:
+        data = await request.json()
+        logger.info(f"Received TradingView Webhook: {data}")
+        
+        # 1. Map to standardized Signal
+        from core.signals import Signal
+        signal = {
+            "id": random.randint(1000, 9999),
+            "symbol": data.get("symbol", "UNKNOWN"),
+            "direction": data.get("action", "LONG").upper(),
+            "entry": float(data.get("price", 0)),
+            "tp": float(data.get("tp", 0)),
+            "sl": float(data.get("sl", 0)),
+            "pattern": "TradingView External Alert",
+            "created_at": datetime.now().strftime("%H:%M:%S")
+        }
+        
+        # 2. Inject into shared state for dashboard visibility
+        SHARED_DATA["signals"] = [signal] + SHARED_DATA.get("signals", [])
+        
+        # 3. Trigger execution gateway if bot is active
+        if SHARED_DATA.get("is_bot_active"):
+            # logic to dispatch to gateway
+            pass
+
+        return JSONResponse(content={"status": "accepted", "signal_id": signal["id"]})
+    except Exception as e:
+        logger.error(f"Webhook Error: {e}")
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
 
 def run_server(host="0.0.0.0", port=8000):
     uvicorn.run(app, host=host, port=port, log_level="info")

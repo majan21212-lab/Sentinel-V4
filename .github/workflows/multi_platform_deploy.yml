@@ -1,0 +1,88 @@
+name: Jewel Elite Multi-Platform Suite
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # 1. MOBILE BUILD (Android & iOS)
+  mobile-build:
+    name: Mobile Build (Android & iOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Install Dependencies
+        run: |
+          cd FlutterApp
+          flutter pub get
+
+      - name: Build Android APK
+        run: |
+          cd FlutterApp
+          flutter build apk --release
+
+      - name: Build iOS IPA (Unsigned)
+        run: |
+          cd FlutterApp
+          flutter build ios --release --no-codesign
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -vr JewelElite_v4.ipa Payload/
+
+      - name: Upload Mobile Installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: JewelElite_Mobile_Installers
+          path: |
+            FlutterApp/build/app/outputs/flutter-apk/app-release.apk
+            FlutterApp/JewelElite_v4.ipa
+
+  # 2. DESKTOP BUILD (Windows, macOS, Linux)
+  desktop-build:
+    name: Desktop Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r requirements.txt
+
+      - name: Build Executable
+        run: |
+          pyinstaller --onefile --name "JewelElite_Bot_${{ matrix.os }}" main.py
+
+      - name: Upload Desktop Installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: JewelElite_Desktop_${{ matrix.os }}
+          path: dist/*

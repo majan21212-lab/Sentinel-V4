@@ -15,9 +15,14 @@ SHARED_DATA = {
     "demo_mode": True,
     "active_profile": "CONSERVATIVE",
     "strategy_mode": "PATTERN",
+    "active_trades": [],
+    "pending_orders": [],
+    "trade_history": [],
+    "active_markets": ["XAUUSDm", "BTCUSDm"], # Default monitored markets
     "is_bot_active": False,
+    "kill_switch": False,
     "demo_balance": 200.00,
-    "execution_bias": "TREND", # TREND or AI_BILATERAL
+    "execution_bias": "TREND",
     "risk_config": {},
     "analytics": {}
 }
