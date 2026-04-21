@@ -5,7 +5,7 @@ import 'services/api_service.dart';
 import 'models/trade_models.dart';
 
 void main() {
-  runApp(const JewelEliteApp());
+  runApp(const GeneralAutomationApp());
 }
 
 class ThemeColors {
@@ -15,8 +15,8 @@ class ThemeColors {
   static const accentBlue = Color(0xFF00E6FF);
 }
 
-class JewelEliteApp extends StatelessWidget {
-  const JewelEliteApp({super.key});
+class GeneralAutomationApp extends StatelessWidget {
+  const GeneralAutomationApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +120,7 @@ class _DashboardViewState extends State<DashboardView> {
   final ApiService _api = ApiService();
   String _price = "0.00";
   String _activeProfile = "CONSERVATIVE";
+  String _strategyMode = "PATTERN";
   bool _demoMode = true;
   bool _autoTrade = false;
   List<TradeSignal> _signals = [];
@@ -137,6 +138,7 @@ class _DashboardViewState extends State<DashboardView> {
           if (data['auto_trade'] != null) _autoTrade = data['auto_trade'];
           if (data['active_profile'] != null) _activeProfile = data['active_profile'];
           if (data['demo_mode'] != null) _demoMode = data['demo_mode'];
+          if (data['strategy_mode'] != null) _strategyMode = data['strategy_mode'];
           if (data['prices'] != null && data['prices']['BTCUSDm'] != null) {
             _price = data['prices']['BTCUSDm'].toStringAsFixed(2);
           }
@@ -171,6 +173,8 @@ class _DashboardViewState extends State<DashboardView> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     children: [
                       const SizedBox(height: 10),
+                      _buildStrategySwitcher(),
+                      const SizedBox(height: 20),
                       _buildChartSection(),
                       const SizedBox(height: 30),
                       _buildSignalFeed(),
@@ -196,7 +200,7 @@ class _DashboardViewState extends State<DashboardView> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("SENTINEL V4", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 3, color: ThemeColors.primaryPurple)),
+              const Text("G.A.B CORE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 3, color: ThemeColors.primaryPurple)),
               Text("\$$_price", style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold, color: Colors.white)),
             ],
           ),
@@ -225,6 +229,37 @@ class _DashboardViewState extends State<DashboardView> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStrategySwitcher() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 8),
+          child: Text("ACTIVE STRATEGY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+        ),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'PATTERN', label: Text('PATTERN'), icon: Icon(Icons.auto_graph, size: 16)),
+            ButtonSegment(value: 'GRID', label: Text('GRID'), icon: Icon(Icons.grid_4x4, size: 16)),
+            ButtonSegment(value: 'DCA', label: Text('DCA'), icon: Icon(Icons.layers, size: 16)),
+          ],
+          selected: {_strategyMode},
+          onSelectionChanged: (Set<String> newSelection) {
+            final mode = newSelection.first;
+            setState(() => _strategyMode = mode);
+            _api.updateSettings({"strategy_mode": mode});
+          },
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              if (states.contains(WidgetState.selected)) return ThemeColors.primaryPurple;
+              return Colors.white.withOpacity(0.05);
+            }),
+          ),
+        ),
+      ],
     );
   }
 
