@@ -11,7 +11,7 @@ void main() {
 class ThemeColors {
   static const background = Color(0xFF050814);
   static const midnightBlue = Color(0xFF0D1226);
-  static const primaryPurple = Color(0xFF5E2EEB);
+  static const primaryPurple = Color(0xFFD4AF37); // Restore Pearl/Institutional Gold
   static const accentBlue = Color(0xFF00E6FF);
 }
 
@@ -200,7 +200,7 @@ class _DashboardViewState extends State<DashboardView> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("G.A.B CORE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 3, color: ThemeColors.primaryPurple)),
+              const Text("JEWEL ELITE PRO", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 3, color: ThemeColors.primaryPurple)),
               Text("\$$_price", style: const TextStyle(fontSize: 42, fontWeight: FontWeight.bold, color: Colors.white)),
             ],
           ),

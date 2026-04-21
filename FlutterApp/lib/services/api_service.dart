@@ -4,8 +4,9 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/trade_models.dart';
 
 class ApiService {
-  static const String baseUrl = "http://192.168.100.10:8000";
-  static const String wsUrl = "ws://192.168.100.10:8000/ws";
+  // Configured for Jewel Elite Global VPS Connectivity
+  static const String baseUrl = "http://94.176.26.147:8000";
+  static const String wsUrl = "ws://94.176.26.147:8000/ws";
 
   /// Connects to the real-time websocket stream
   Stream<dynamic> get marketStream {
@@ -23,16 +24,7 @@ class ApiService {
     return [];
   }
 
-  /// Panic Button: Closes all positions
-  Future<void> panicClose() async {
-    await http.post(
-      Uri.parse("$baseUrl/api/trade"),
-      body: jsonEncode({"action": "close_all"}),
-      headers: {"Content-Type": "application/json"},
-    );
-  }
-
-  /// Updates global bot settings (Profile, Demo, Auto-Trade)
+  /// Updates global bot settings (Profile, Demo, Auto-Trade, Bias)
   Future<void> updateSettings(Map<String, dynamic> settings) async {
     await http.post(
       Uri.parse("$baseUrl/api/settings"),

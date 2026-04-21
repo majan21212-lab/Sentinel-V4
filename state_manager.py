@@ -15,6 +15,9 @@ SHARED_DATA = {
     "demo_mode": True,
     "active_profile": "CONSERVATIVE",
     "strategy_mode": "PATTERN",
+    "is_bot_active": False,
+    "demo_balance": 200.00,
+    "execution_bias": "TREND", # TREND or AI_BILATERAL
     "risk_config": {},
     "analytics": {}
 }

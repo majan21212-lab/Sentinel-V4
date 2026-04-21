@@ -81,6 +81,8 @@ async def update_settings(request: Request):
     if "demo_mode" in data: SHARED_DATA["demo_mode"] = bool(data["demo_mode"])
     if "active_profile" in data: SHARED_DATA["active_profile"] = data["active_profile"]
     if "strategy_mode" in data: SHARED_DATA["strategy_mode"] = data["strategy_mode"]
+    if "is_bot_active" in data: SHARED_DATA["is_bot_active"] = bool(data["is_bot_active"])
+    if "execution_bias" in data: SHARED_DATA["execution_bias"] = data["execution_bias"]
     
     executor = state.get_executor()
     executor.risk_engine.config.active_profile = SHARED_DATA["active_profile"]
@@ -107,11 +109,21 @@ async def broadcast_data():
 async def startup_event():
     asyncio.create_task(broadcast_data())
 
-@app.post("/api/test_signal")
-async def simulate_signal():
-    test_sig = {"id": 9999, "symbol": "BTCUSDm", "direction": "LONG", "entry": 65000.0, "tp": 66000.0, "sl": 64500.0, "timeframe": "M5", "created_at": datetime.now().strftime("%H:%M:%S")}
+@app.post("/api/test_jewel_elite")
+async def simulate_jewel_elite():
+    test_sig = {
+        "id": 8888, 
+        "symbol": "XAUUSDm", 
+        "direction": "LONG", 
+        "entry": 2350.50, 
+        "tp": 2380.00, 
+        "sl": 2335.00, 
+        "timeframe": "M15", 
+        "pattern": "Institutional Liquidity Sweep (G.A.B v1.0)",
+        "created_at": datetime.now().strftime("%H:%M:%S")
+    }
     SHARED_DATA["signals"] = [test_sig] + SHARED_DATA.get("signals", [])
-    return JSONResponse(content={"status": "success", "message": "Test signal injected"})
+    return JSONResponse(content={"status": "success", "message": "Jewel Elite Institutional Signal Injected"})
 
 def run_server(host="0.0.0.0", port=8000):
     uvicorn.run(app, host=host, port=port, log_level="info")

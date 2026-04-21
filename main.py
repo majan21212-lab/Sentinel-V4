@@ -27,8 +27,8 @@ async def push_to_dashboard(data: dict):
         pass 
 
 async def main():
-    log = setup_logger("G.A.B_CORE_F")
-    log.info("Starting G.A.B Core on F: drive...")
+    log = setup_logger("JEWEL_ELITE_CORE")
+    log.info("Starting Jewel Elite v4.1 Institutional Core...")
 
     # 2. Launch G.A.B Dashboard Server (web_server.py)
     log.info("Launching G.A.B Dashboard at http://localhost:8000 ...")
@@ -58,6 +58,11 @@ async def main():
 
     try:
         while True:
+            # Global Activation Check
+            if not state.SHARED_DATA.get("is_bot_active", False):
+                await asyncio.sleep(2)
+                continue
+
             strategy_mode = state.SHARED_DATA.get("strategy_mode", "PATTERN")
             for symbol in symbols:
                 if strategy_mode == "PATTERN":
