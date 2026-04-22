@@ -84,29 +84,28 @@
 
         <aside class="side-column">
             <div class="card glass">
-                <div class="card-title">Get Started Checklist</div>
-                <div style="margin-bottom: 20px;">
-                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden;">
-                        <div style="width: 50%; height: 100%; background: var(--accent-purple);"></div>
-                    </div>
+                <div class="card-title">Performance Heatmap</div>
+                <div id="heatmap-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 10px;">
+                    <!-- 28 days of performance simulated -->
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.8; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.4; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--danger); opacity: 0.5; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.9; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.6; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 1; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.3; height: 12px; border: none;"></div>
+                    <!-- Repeat for more rows -->
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.5; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.7; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--danger); opacity: 0.8; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.4; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.8; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.2; height: 12px; border: none;"></div>
+                    <div class="chip" style="background: var(--accent-neon); opacity: 0.9; height: 12px; border: none;"></div>
                 </div>
-                <div id="checklist-items">
-                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                        <div style="width: 20px; height: 20px; border-radius: 50%; background: var(--accent-purple); display: flex; align-items: center; justify-content: center; margin-right: 12px;">
-                            <span style="font-size: 10px;">✓</span>
-                        </div>
-                        <span style="font-size: 0.9rem;">Create Jewel Elite account</span>
-                    </div>
-                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                        <div style="width: 20px; height: 20px; border-radius: 50%; background: var(--accent-purple); display: flex; align-items: center; justify-content: center; margin-right: 12px;">
-                            <span style="font-size: 10px;">✓</span>
-                        </div>
-                        <span style="font-size: 0.9rem;">Start your first bot</span>
-                    </div>
-                    <div style="display: flex; align-items: center; margin-bottom: 15px; opacity: 0.4;">
-                        <div style="width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--glass-border); margin-right: 12px;"></div>
-                        <span style="font-size: 0.9rem;">Connect a trading account</span>
-                    </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-secondary); margin-top: 10px;">
+                    <span>Last 28 Days</span>
+                    <span>94% Accuracy</span>
                 </div>
             </div>
 

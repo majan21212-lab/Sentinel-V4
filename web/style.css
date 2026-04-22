@@ -1,14 +1,15 @@
 :root {
-    --bg-dark: #000000;
-    --surface: #111111;
-    --glass-bg: rgba(20, 20, 20, 0.7);
+    --bg-dark: #050505;
+    --card-bg: rgba(20, 20, 20, 0.7);
+    --glass-bg: rgba(255, 255, 255, 0.03);
     --glass-border: rgba(255, 255, 255, 0.08);
-    --accent-purple: #6200EE;
-    --accent-gold: #D4AF37;
+    --accent-neon: #00FFA3;
+    --accent-blue: #0085FF;
     --text-primary: #FFFFFF;
     --text-secondary: #888888;
-    --success: #00C853;
-    --error: #FF1744;
+    --danger: #FF3B3B;
+    --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+    --glow-shadow: 0 0 20px rgba(0, 255, 163, 0.2);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
@@ -34,12 +35,12 @@ header {
 
 .activate-btn {
     padding: 14px 40px; border-radius: 12px; border: none;
-    background: var(--accent-purple); color: white; font-weight: 700; cursor: pointer;
+    background: var(--accent-blue); color: white; font-weight: 700; cursor: pointer;
     transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 .activate-btn.active {
-    background: var(--success); transform: scale(1.05);
-    box-shadow: 0 0 40px rgba(0, 200, 83, 0.3);
+    background: var(--accent-neon); color: var(--bg-dark); transform: scale(1.05);
+    box-shadow: var(--glow-shadow);
 }
 
 .dashboard-grid {
@@ -57,12 +58,12 @@ header {
 .signal-row:hover { border-color: var(--glass-border); background: rgba(255,255,255,0.04); }
 
 .direction-tag { padding: 6px 12px; border-radius: 8px; font-weight: 800; font-size: 0.75rem; }
-.LONG { background: rgba(0, 200, 83, 0.15); color: var(--success); }
-.SHORT { background: rgba(255, 23, 68, 0.15); color: var(--error); }
+.LONG { background: rgba(0, 255, 163, 0.15); color: var(--accent-neon); }
+.SHORT { background: rgba(255, 59, 59, 0.15); color: var(--danger); }
 
 .terminal-tabs { display: flex; gap: 15px; margin-bottom: 20px; }
 .tab-btn { padding: 8px 20px; background: rgba(255,255,255,0.03); border: none; color: var(--text-secondary); border-radius: 10px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
-.tab-btn.active { background: var(--accent-purple); color: white; }
+.tab-btn.active { background: var(--accent-blue); color: white; }
 
 .terminal-table th { font-weight: 800; padding: 15px; color: var(--text-secondary); border-bottom: 1px solid var(--glass-border); }
 .terminal-table td { padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.01); }
@@ -73,7 +74,7 @@ input, select {
     background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border);
     color: white; padding: 12px; border-radius: 12px; outline: none; transition: 0.3s;
 }
-input:focus, select:focus { border-color: var(--accent-purple); background: rgba(255,255,255,0.05); }
+input:focus, select:focus { border-color: var(--accent-blue); background: rgba(255,255,255,0.05); }
 
 .modal-content {
     background: var(--surface); border-radius: 30px;

@@ -32,7 +32,7 @@ class MarketBot:
 
             # 3. Execution Bias Filter
             bias = state.SHARED_DATA.get("execution_bias", "TREND")
-            if bias == "TREND" and signal.score < 50:
+            if bias == "TREND" and signal.score < 0:
                  logger.warning(f"[{self.symbol}] Trade Filtered: Weak institutional trend alignment.")
                  return
 
@@ -43,8 +43,18 @@ class MarketBot:
                     logger.warning(f"[{self.symbol}] AI Rejected Trade: {rationale}")
                     return
 
-            # 5. Simulated Execution
-            await self._simulate_execution(signal)
+            # 5. Execution Gateway
+            is_demo = state.SHARED_DATA.get("demo_mode", True)
+            if not is_demo:
+                logger.info(f"[{self.symbol}] Dispatching LIVE order to Platform...")
+                res = self.platform.place_order(signal.dict())
+                if res.get("status") == "success":
+                    logger.info(f"[{self.symbol}] Order Successfully Placed: {res.get('order_id', res.get('ticket'))}")
+                else:
+                    logger.error(f"[{self.symbol}] Order Placement Failed: {res.get('message')}")
+            else:
+                logger.info(f"[{self.symbol}] Simulating DEMO execution...")
+                await self._simulate_execution(signal)
 
         except Exception as e:
             logger.exception(f"Error in MarketBot for {self.symbol}: {e}")

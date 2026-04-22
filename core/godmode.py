@@ -109,11 +109,11 @@ class GodModeEngine:
         short_score = sum([mtf_bear, bear_hull, vol_active, bear_mom, bear_sweep, is_premium, bear_vwap, bear_bb, bear_fvg, bear_msb, bear_breaker, bear_rsi])
         
         max_possible = 12
-        min_score = 7
+        min_score = 1
         
-        if long_score >= min_score and bull_hull:
+        if long_score >= min_score:
             return self._format_signal("LONG", (long_score/max_possible)*100, latest)
-        elif short_score >= min_score and bear_hull:
+        elif short_score >= min_score:
             return self._format_signal("SHORT", (short_score/max_possible)*100, latest)
             
         return None

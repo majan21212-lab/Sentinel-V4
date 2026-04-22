@@ -24,6 +24,7 @@ class Signal(BaseModel):
     take_profit_1: float = Field(..., alias="tp1")
     take_profit_2: Optional[float] = Field(None, alias="tp2")
     quantity: float = 0.0
+    score: float = 0.0
     pattern: str = "Institutional"
     timeframe: str = "H1"
     timestamp: datetime = Field(default_factory=datetime.now)

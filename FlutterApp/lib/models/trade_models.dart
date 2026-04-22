@@ -8,6 +8,8 @@ class TradeSignal {
   final double tp1;
   final double sl;
   final String timeframe;
+  final String pattern;
+  final String status;
   final String createdAt;
 
   TradeSignal({
@@ -18,6 +20,8 @@ class TradeSignal {
     required this.tp1,
     required this.sl,
     required this.timeframe,
+    required this.pattern,
+    required this.status,
     required this.createdAt,
   });
 
@@ -29,8 +33,10 @@ class TradeSignal {
       entry: json['entry']?.toDouble() ?? 0.0,
       tp1: json['tp']?.toDouble() ?? 0.0,
       sl: json['sl']?.toDouble() ?? 0.0,
-      timeframe: json['timeframe'] as String,
-      createdAt: json['created_at'] as String,
+      timeframe: json['timeframe'] ?? "M5",
+      pattern: json['pattern'] ?? "Unknown",
+      status: json['status'] ?? "OPEN",
+      createdAt: json['created_at'] ?? "",
     );
   }
 }

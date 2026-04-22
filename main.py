@@ -4,6 +4,7 @@ import sys
 import logging
 import httpx
 import subprocess
+from datetime import datetime, timedelta
 try:
     import MetaTrader5 as mt5
     MT5_AVAILABLE = True
@@ -31,7 +32,7 @@ async def main():
 
     pkg_path = os.path.dirname(os.path.abspath(__file__))
     dashboard_process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "web_server:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"],
+        [sys.executable, "-m", "uvicorn", "web_server:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"],
         cwd=pkg_path
     )
 
@@ -50,6 +51,8 @@ async def main():
     
     try:
         while True:
+            # 0. Sync state from disk (Persistent shared state)
+            state.SHARED_DATA = state.load_shared_state()
             # 0. Cortex Evolution Cycle (Run every hour)
             if datetime.now() - last_evolution > timedelta(hours=1):
                 log.info("Cortex is evolving...")
@@ -77,20 +80,25 @@ async def main():
                 if strategy_mode == "PATTERN":
                     # Simulated data fetch for demo
                     timeframe = mt5.TIMEFRAME_M15 if MT5_AVAILABLE else 15
+                    log.info(f"[{symbol}] Fetching data for analysis...")
                     df_m15 = await asyncio.to_thread(platform.fetch_historical_data, symbol, timeframe, 300) if hasattr(platform, 'fetch_historical_data') else None
 
                     if df_m15 is not None and not df_m15.empty:
+                        log.info(f"[{symbol}] Data received. Analyzing with GodModeEngine...")
                         engine = GodModeEngine(df_m15)
                         raw_signal = engine.analyze()
                         if raw_signal:
+                            raw_signal["symbol"] = symbol
+                            log.info(f"[{symbol}] SIGNAL DETECTED: {raw_signal['direction']} (Score: {raw_signal.get('score', 'N/A')})")
                             asyncio.create_task(market_bots[symbol].process_signal(raw_signal))
+                        else:
+                            log.info(f"[{symbol}] No valid signal at this time.")
                 elif strategy_mode == "GRID":
                     log.info(f"GRID MONITORING {symbol}")
                 elif strategy_mode == "DCA":
                     log.info(f"DCA MONITORING {symbol}")
 
-            await asyncio.sleep(5) 
-    except asyncio.CancelledError:
+            await asyncio.sleep(10) # Increased sleep for readability in logs    except asyncio.CancelledError:
         log.info("Shutting down...")
     finally:
         dashboard_process.terminate()

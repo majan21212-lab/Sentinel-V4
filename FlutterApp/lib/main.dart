@@ -213,35 +213,43 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   }
 
   Widget _buildSignalList(List<TradeSignal> signals) {
+    if (signals.isEmpty) {
+      return const Center(child: Text("No signals detected", style: TextStyle(color: ThemeColors.textGrey)));
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(20),
-      itemCount: 5, // Simulated for UI
-      itemBuilder: (context, index) => _buildTradeCard(),
+      itemCount: signals.length,
+      itemBuilder: (context, index) => _buildTradeCard(signals[index]),
     );
   }
 
-  Widget _buildTradeCard() {
+  Widget _buildTradeCard(TradeSignal sig) {
+    final isBuy = sig.direction.toUpperCase() == "LONG" || sig.direction.toUpperCase() == "BUY";
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
       child: Row(
         children: [
-          const CircleAvatar(radius: 18, backgroundColor: Colors.white10, child: Text("🇺🇸", style: TextStyle(fontSize: 18))),
+          CircleAvatar(
+            radius: 18, 
+            backgroundColor: isBuy ? ThemeColors.successGreen.withOpacity(0.1) : ThemeColors.errorRed.withOpacity(0.1), 
+            child: Text(sig.symbol.contains("XAU") ? "🏆" : "📈", style: const TextStyle(fontSize: 18))
+          ),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("XAUUSDm", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(sig.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               Row(
                 children: [
-                  const Text("Sell ", style: TextStyle(color: ThemeColors.errorRed, fontSize: 12)),
-                  const Text("0.03 lots at ~4 737.177", style: TextStyle(color: ThemeColors.textGrey, fontSize: 12)),
+                  Text(isBuy ? "Buy " : "Sell ", style: TextStyle(color: isBuy ? ThemeColors.successGreen : ThemeColors.errorRed, fontSize: 12)),
+                  Text("${sig.entry} at ${sig.timeframe}", style: const TextStyle(color: ThemeColors.textGrey, fontSize: 12)),
                 ],
               ),
               Container(
                 margin: const EdgeInsets.only(top: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-                child: const Text("My Demo bot #3", style: TextStyle(color: ThemeColors.textGrey, fontSize: 10)),
+                child: Text(sig.pattern, style: const TextStyle(color: ThemeColors.textGrey, fontSize: 10)),
               ),
             ],
           ),
@@ -249,8 +257,8 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text("-58.24\$", style: TextStyle(color: ThemeColors.errorRed, fontWeight: FontWeight.bold)),
-              const Text("-0.41%", style: TextStyle(color: ThemeColors.errorRed, fontSize: 12)),
+              Text(sig.createdAt, style: const TextStyle(color: ThemeColors.textGrey, fontSize: 12)),
+              Text(sig.direction, style: TextStyle(color: isBuy ? ThemeColors.successGreen : ThemeColors.errorRed, fontWeight: FontWeight.bold)),
             ],
           ),
         ],

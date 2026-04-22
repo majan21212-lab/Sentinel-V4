@@ -81,6 +81,7 @@ async def get_signals():
 @app.post("/api/settings")
 async def update_settings(request: Request):
     data = await request.json()
+    logger.info(f"Updating Settings: {data}")
     if "auto_trade" in data: SHARED_DATA["auto_trade"] = bool(data["auto_trade"])
     if "demo_mode" in data: SHARED_DATA["demo_mode"] = bool(data["demo_mode"])
     if "active_profile" in data: SHARED_DATA["active_profile"] = data["active_profile"]
@@ -96,6 +97,8 @@ async def update_settings(request: Request):
     executor.risk_engine.config.execution_mode = ExecutionMode.DEMO if SHARED_DATA["demo_mode"] else ExecutionMode.LIVE
     
     SHARED_DATA["risk_config"] = executor.risk_engine.config.dict()
+    logger.info(f"Saving State... is_bot_active={SHARED_DATA['is_bot_active']}")
+    state.save_shared_state(SHARED_DATA)
     return JSONResponse(content={"status": "success", "config": SHARED_DATA["risk_config"]})
 
 @app.websocket("/ws")
@@ -126,7 +129,7 @@ async def broadcast_data():
                     active_connections.remove(ws)
         except Exception as e:
             print(f"Broadcast Error: {e}")
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
 
 @app.on_event("startup")
 async def startup_event():
@@ -146,6 +149,7 @@ async def simulate_jewel_elite():
         "created_at": datetime.now().strftime("%H:%M:%S")
     }
     SHARED_DATA["signals"] = [test_sig] + SHARED_DATA.get("signals", [])
+    state.save_shared_state(SHARED_DATA)
     return JSONResponse(content={"status": "success", "message": "Jewel Elite Institutional Signal Injected"})
 
 @app.post("/api/connect_broker")
