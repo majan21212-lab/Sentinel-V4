@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Jewel Elite | Institutional Execution</title>
     <link rel="stylesheet" href="static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
@@ -16,18 +16,14 @@
 
         <div class="header-center">
             <button id="master-activation-btn" class="activate-btn" onclick="toggleBot()">
-                <span class="btn-ripple"></span>
-                <span id="activation-text">ACTIVATE BOT</span>
-            </button>
-            <button id="kill-switch-btn" class="kill-btn" onclick="toggleKillSwitch()" style="margin-left: 10px;">
-                KILL SWITCH
+                <span id="activation-text">INVOKE CORE ENGINE</span>
             </button>
         </div>
 
         <div class="status-indicator">
             <div class="card glass balance-card">
-                <span style="font-size: 0.6rem; opacity: 0.6;">VIRTUAL TREASURY</span>
-                <div id="balance-display">$200.00</div>
+                <div id="balance-display">$3,968.82</div>
+                <div id="equity-display" class="free-margin">Free margin: $3,940.08</div>
             </div>
         </div>
     </header>
@@ -35,38 +31,35 @@
     <main class="dashboard-grid">
         <section class="main-column">
             <!-- Professional TradingView Chart -->
-            <div class="card glass chart-container" style="padding: 0; overflow: hidden; height: 400px;">
-                <div id="TV_CHART_HOLDER" style="width: 100%; height: 100%;">
-                    <!-- TradingView Widget BEGIN -->
-                    <div class="tradingview-widget-container" style="height:100%;width:100%">
-                        <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
-                        <script src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js">
-                        {
-                            "autosize": true,
-                            "symbol": "OANDA:XAUUSD",
-                            "interval": "15",
-                            "timezone": "Etc/UTC",
-                            "theme": "dark",
-                            "style": "1",
-                            "locale": "en",
-                            "enable_publishing": false,
-                            "allow_symbol_change": true,
-                            "calendar": false,
-                            "support_host": "https://www.tradingview.com"
-                        }
-                        </script>
-                    </div>
+            <div class="card glass chart-container" style="padding: 0; overflow: hidden; height: 450px;">
+                <div class="tradingview-widget-container" style="height:100%;width:100%">
+                    <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+                    <script src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js">
+                    {
+                        "autosize": true,
+                        "symbol": "OANDA:XAUUSD",
+                        "interval": "15",
+                        "timezone": "Etc/UTC",
+                        "theme": "dark",
+                        "style": "1",
+                        "locale": "en",
+                        "enable_publishing": false,
+                        "allow_symbol_change": true,
+                        "calendar": false,
+                        "support_host": "https://www.tradingview.com"
+                    }
+                    </script>
                 </div>
             </div>
 
             <!-- Professional Terminal -->
             <div class="card glass terminal-container">
                 <div class="terminal-header">
-                    <div class="card-title">Professional Terminal</div>
+                    <div class="card-title">Institutional Terminal</div>
                     <div class="terminal-tabs">
-                        <button class="tab-btn active" onclick="setTerminalTab('active')">Active</button>
+                        <button class="tab-btn active" onclick="setTerminalTab('active')">Open</button>
                         <button class="tab-btn" onclick="setTerminalTab('pending')">Pending</button>
-                        <button class="tab-btn" onclick="setTerminalTab('history')">History</button>
+                        <button class="tab-btn" onclick="setTerminalTab('history')">Closed</button>
                     </div>
                 </div>
                 <div class="terminal-content">
@@ -91,151 +84,52 @@
 
         <aside class="side-column">
             <div class="card glass">
-                <div class="card-title">Market Management</div>
-                <div class="market-categories">
-                    <button class="cat-btn active" onclick="setMarketCategory('all')">All</button>
-                    <button class="cat-btn" onclick="setMarketCategory('forex')">Forex</button>
-                    <button class="cat-btn" onclick="setMarketCategory('crypto')">Crypto</button>
-                    <button class="cat-btn" onclick="setMarketCategory('indices')">Indices</button>
-                    <button class="cat-btn" onclick="setMarketCategory('stocks')">Stocks</button>
-                </div>
-                <div class="market-selector" style="margin-top: 15px;">
-                    <div id="market-chips" class="market-chips">
-                        <!-- Populated by JS -->
+                <div class="card-title">Get Started Checklist</div>
+                <div style="margin-bottom: 20px;">
+                    <div style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden;">
+                        <div style="width: 50%; height: 100%; background: var(--accent-purple);"></div>
                     </div>
-                    <div class="add-market">
-                        <select id="market-select">
-                            <!-- Populated by JS based on category -->
-                        </select>
-                        <button onclick="addMarket()">MONITOR</button>
+                </div>
+                <div id="checklist-items">
+                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                        <div style="width: 20px; height: 20px; border-radius: 50%; background: var(--accent-purple); display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+                            <span style="font-size: 10px;">✓</span>
+                        </div>
+                        <span style="font-size: 0.9rem;">Create Elirox account</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                        <div style="width: 20px; height: 20px; border-radius: 50%; background: var(--accent-purple); display: flex; align-items: center; justify-content: center; margin-right: 12px;">
+                            <span style="font-size: 10px;">✓</span>
+                        </div>
+                        <span style="font-size: 0.9rem;">Start your first bot</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin-bottom: 15px; opacity: 0.4;">
+                        <div style="width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--glass-border); margin-right: 12px;"></div>
+                        <span style="font-size: 0.9rem;">Connect a trading account</span>
                     </div>
                 </div>
             </div>
 
-            <div class="card glass" style="margin-top: 20px;">
+            <div class="card glass">
+                <div class="card-title">Detection Feed</div>
+                <div class="signal-feed" id="signal-list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div class="card glass">
                 <div class="card-title">Bot Configuration</div>
-                
                 <div class="control-group">
                     <label>Strategy Mode</label>
-                    <select class="config-select" id="strategy-mode-select" onchange="updateConfig('strategy_mode', this.value)">
+                    <select class="config-select" id="strategy-mode-select" onchange="updateConfig('strategy_mode', this.value)" style="width: 100%; margin-top: 8px;">
                         <option value="PATTERN">Institutional Pattern</option>
                         <option value="GRID">High-Freq Grid</option>
                         <option value="DCA">DCA (Martingale Hybrid)</option>
-                        <option value="SCALPER">AI Scalper (Sub-Second)</option>
                     </select>
                 </div>
-
-                <div class="control-group" style="margin-top: 15px;">
-                    <label>Risk Profile</label>
-                    <select class="config-select" id="risk-profile-select" onchange="updateConfig('active_profile', this.value)">
-                        <option value="CONSERVATIVE">Conservative (0.5% Risk)</option>
-                        <option value="MODERATE">Moderate (1.0% Risk)</option>
-                        <option value="AGGRESSIVE">Aggressive (2.0% Risk)</option>
-                        <option value="GOD_MODE">GOD MODE (UNLIMITED)</option>
-                    </select>
-                </div>
-
-                <div class="control-group" style="margin-top: 15px;">
-                    <label>Execution Bias</label>
-                    <div class="bias-switcher">
-                        <button class="bias-btn active" id="bias-trend" onclick="setBias('TREND')">TREND ONLY</button>
-                        <button class="bias-btn" id="bias-ai" onclick="setBias('AI_BILATERAL')">AI BILATERAL</button>
-                    </div>
-                </div>
-
-                <div class="control-group" style="margin-top: 15px;">
-                    <label>Primary Timeframe</label>
-                    <div class="tf-selector">
-                        <button class="tf-btn" onclick="setTimeframe('M1')">1m</button>
-                        <button class="tf-btn" onclick="setTimeframe('M5')">5m</button>
-                        <button class="tf-btn active" onclick="setTimeframe('M15')">15m</button>
-                        <button class="tf-btn" onclick="setTimeframe('H1')">1h</button>
-                        <button class="tf-btn" onclick="setTimeframe('H4')">4h</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card glass" style="margin-top: 20px;">
-                <div class="card-title">Account Connectivity</div>
-                <div class="broker-list">
-                    <div class="broker-row">
-                        <span>MetaTrader 5</span>
-                        <span class="status-tag active">CONNECTED</span>
-                    </div>
-                    <div class="broker-row">
-                        <span>TradingView (Webhook)</span>
-                        <span class="status-tag active">LISTENING</span>
-                    </div>
-                    <div class="broker-row">
-                        <span>OANDA / CCXT</span>
-                        <span class="status-tag" style="opacity: 0.5;">DISCONNECTED</span>
-                    </div>
-                </div>
-                <button class="add-btn" onclick="showConnectModal()" style="width: 100%; margin-top: 15px; background: rgba(255,255,255,0.05); border: 1px dashed var(--glass-border); padding: 10px; border-radius: 10px; color: var(--text-secondary); cursor: pointer;">
-                    + CONNECT NEW BROKER
-                </button>
-            </div>
-
-            <div class="card glass" style="margin-top: 20px;">
-                <div class="card-title">Detection Feed</div>
-                <div class="signal-feed" id="signal-list"></div>
             </div>
         </aside>
     </main>
-
-    <!-- Connect Broker Modal -->
-    <div id="connect-modal" class="modal-overlay" style="display: none;">
-        <div class="card glass modal-content">
-            <div class="card-title">Link Institutional Account</div>
-            <div class="control-group">
-                <label>Broker / Platform</label>
-                <select class="config-select" id="broker-type">
-                    <optgroup label="Popular Integrations">
-                        <option value="TRADINGVIEW">TradingView (Full Sync)</option>
-                        <option value="BINANCE">Binance (Crypto)</option>
-                        <option value="OKX">OKX (Crypto)</option>
-                    </optgroup>
-                    <optgroup label="Crypto Exchanges">
-                        <option value="COINBASE">Coinbase Pro</option>
-                        <option value="KRAKEN">Kraken</option>
-                        <option value="BYBIT">Bybit</option>
-                        <option value="KUCOIN">KuCoin</option>
-                        <option value="GATEIO">Gate.io</option>
-                    </optgroup>
-                    <optgroup label="Forex & CFDs">
-                        <option value="OANDA">OANDA</option>
-                        <option value="IG">IG Markets</option>
-                        <option value="PEPPERSTONE">Pepperstone</option>
-                        <option value="FOREX_COM">Forex.com</option>
-                        <option value="SAXO">Saxo Bank</option>
-                    </optgroup>
-                    <optgroup label="Equities & Futures">
-                        <option value="IBKR">Interactive Brokers</option>
-                        <option value="TD_AMERITRADE">TD Ameritrade</option>
-                        <option value="ROBINHOOD">Robinhood</option>
-                        <option value="TRADE_STATION">TradeStation</option>
-                    </optgroup>
-                </select>
-            </div>
-            <div class="control-group" style="margin-top: 15px;">
-                <label>API Key / Account ID</label>
-                <input type="text" class="config-select" id="broker-api-key" placeholder="Enter API Key">
-            </div>
-            <div class="control-group" style="margin-top: 15px;">
-                <label>API Secret / Password</label>
-                <input type="password" class="config-select" id="broker-api-secret" placeholder="Enter Secret">
-            </div>
-            <div class="modal-actions" style="margin-top: 25px; display: flex; gap: 10px;">
-                <button class="activate-btn" style="flex: 1;" onclick="submitConnection()">ESTABLISH LINK</button>
-                <button class="bias-btn" style="flex: 1;" onclick="hideConnectModal()">CANCEL</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="status-bar glass">
-        <div class="status-item"><span class="text-secondary">SYSTEM:</span> <span id="system-status">STANDBY</span></div>
-        <div class="status-item"><span class="text-secondary">MODE:</span> <span id="current-mode">PATTERN</span></div>
-    </div>
 
     <script src="static/app.js"></script>
 </body>
