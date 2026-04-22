@@ -85,7 +85,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
       body: SafeArea(
         child: Column(
           children: [
-            _buildEliroxHeader(),
+            _buildJewelEliteHeader(),
             _buildChecklist(),
             _buildTabSection(),
             Expanded(
@@ -104,7 +104,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     );
   }
 
-  Widget _buildEliroxHeader() {
+  Widget _buildJewelEliteHeader() {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: GlassmorphicContainer(
@@ -171,7 +171,7 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
           const SizedBox(height: 15),
           LinearProgressIndicator(value: 0.5, backgroundColor: Colors.white10, color: ThemeColors.accentPurple, borderRadius: BorderRadius.circular(10), minHeight: 6),
           const SizedBox(height: 20),
-          _checklistTile("Create Elirox account", true),
+          _checklistTile("Create Jewel Elite account", true),
           _checklistTile("Start your first bot", true),
           _checklistTile("Connect a trading account", false),
           _checklistTile("Choose your plan", false),
