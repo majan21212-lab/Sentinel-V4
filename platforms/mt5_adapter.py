@@ -1,8 +1,15 @@
 import os
 import asyncio
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except (ImportError, OSError):
+    mt5 = None
+    MT5_AVAILABLE = False
+
 import logging
 import pandas as pd
+
 from typing import Dict, Any
 from .base import BasePlatformAdapter
 from core.signals import Signal
@@ -16,6 +23,10 @@ class MT5Adapter(BasePlatformAdapter):
 
     async def connect(self) -> bool:
         """Initialises MT5 connection."""
+        if not MT5_AVAILABLE:
+            logger.warning("MT5 library not available on this platform.")
+            return False
+        
         login = os.getenv("MT5_LOGIN") or os.getenv("EXNESS_ACCOUNT")
         password = os.getenv("MT5_PASSWORD") or os.getenv("EXNESS_PASSWORD")
         server = os.getenv("MT5_SERVER") or os.getenv("EXNESS_SERVER")
@@ -41,6 +52,7 @@ class MT5Adapter(BasePlatformAdapter):
         return True
 
     async def get_balance(self) -> Dict[str, float]:
+        if not MT5_AVAILABLE: return {"equity": 0.0, "balance": 0.0}
         if not self.connected: await self.connect()
         acc = mt5.account_info()
         if acc:
@@ -48,11 +60,13 @@ class MT5Adapter(BasePlatformAdapter):
         return {"equity": 0.0, "balance": 0.0}
 
     async def get_open_positions_count(self) -> int:
+        if not MT5_AVAILABLE: return 0
         if not self.connected: await self.connect()
         positions = mt5.positions_get()
         return len(positions) if positions else 0
 
     async def place_order(self, signal: Signal) -> Dict[str, Any]:
+        if not MT5_AVAILABLE: return {"status": "error", "message": "MT5 not available"}
         if not self.connected: await self.connect()
         
         symbol = signal.symbol
@@ -91,7 +105,8 @@ class MT5Adapter(BasePlatformAdapter):
         return {"status": "success", "ticket": result.order}
 
     async def disconnect(self):
-        mt5.shutdown()
+        if MT5_AVAILABLE:
+            mt5.shutdown()
         self.connected = False
         logger.info("MT5 Adapter Disconnected.")
 
@@ -101,6 +116,7 @@ class MT5Adapter(BasePlatformAdapter):
 
     def get_account_info(self):
         """Fetches account balance and equity for risk management."""
+        if not MT5_AVAILABLE: return {"balance": 0.0, "equity": 0.0}
         acc_info = mt5.account_info()
         if acc_info is None:
             logger.error("Failed to fetch MT5 account info")
@@ -114,6 +130,7 @@ class MT5Adapter(BasePlatformAdapter):
 
     def close_all_positions(self):
         """Emergency panic button to close all trades."""
+        if not MT5_AVAILABLE: return {"status": "error", "message": "MT5 not available"}
         positions = mt5.positions_get()
         if not positions:
             return {"status": "success", "closed": 0}
@@ -145,12 +162,14 @@ class MT5Adapter(BasePlatformAdapter):
         return {"status": "success", "closed": count}
 
     def get_active_symbols(self):
+        if not MT5_AVAILABLE: return []
         positions = mt5.positions_get()
         if not positions: return []
         return list(set([p.symbol for p in positions]))
 
     def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int) -> pd.DataFrame:
         """Fetches historical data synchronously (intended for use with to_thread)."""
+        if not MT5_AVAILABLE: return pd.DataFrame()
         if not self.connected:
             # Synchronous initialize
             if not mt5.initialize():

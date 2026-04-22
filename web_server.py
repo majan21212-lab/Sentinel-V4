@@ -7,6 +7,8 @@ import os
 import sqlite3
 import asyncio
 from datetime import datetime
+import logging
+import random
 
 import pandas as pd
 import state_manager as state
@@ -17,7 +19,7 @@ mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 
 active_connections = set()
-
+logger = logging.getLogger("WEB_SERVER")
 app = FastAPI()
 
 app.add_middleware(

@@ -4,7 +4,13 @@ import sys
 import logging
 import httpx
 import subprocess
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except (ImportError, OSError):
+    mt5 = None
+    MT5_AVAILABLE = False
+
 from dotenv import load_dotenv
 
 from core.logger import setup_logger
@@ -14,6 +20,7 @@ from platforms.mt5_adapter import MT5Adapter
 from markets.market_bot import MarketBot
 from core.godmode import GodModeEngine
 import state_manager as state
+
 
 load_dotenv(override=True)
 
@@ -60,7 +67,9 @@ async def main():
             for symbol in active_symbols:
                 if strategy_mode == "PATTERN":
                     # Simulated data fetch for demo
-                    df_m15 = await asyncio.to_thread(platform.fetch_historical_data, symbol, mt5.TIMEFRAME_M15, 300) if hasattr(platform, 'fetch_historical_data') else None
+                    timeframe = mt5.TIMEFRAME_M15 if MT5_AVAILABLE else 15
+                    df_m15 = await asyncio.to_thread(platform.fetch_historical_data, symbol, timeframe, 300) if hasattr(platform, 'fetch_historical_data') else None
+
                     if df_m15 is not None and not df_m15.empty:
                         engine = GodModeEngine(df_m15)
                         raw_signal = engine.analyze()
