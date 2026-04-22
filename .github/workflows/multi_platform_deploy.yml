@@ -1,97 +1,101 @@
-1: name: Jewel Elite Multi-Platform Suite
-2: 
-3: on:
-4:   push:
-5:     branches: [ main, master ]
-6:   workflow_dispatch:
-7: 
-8: env:
-9:   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-10: 
-11: jobs:
-12:   # 1. MOBILE BUILD (Android & iOS)
-13:   mobile-build:
-14:     name: Mobile Build (Android & iOS)
-15:     runs-on: macos-latest
-16:     steps:
-17:       - name: Checkout Code
-18:         uses: actions/checkout@v5
-19: 
-20:       - name: Set up Java
-21:         uses: actions/setup-java@v5
-22:         with:
-23:           distribution: 'zulu'
-24:           java-version: '17'
-25: 
-26:       - name: Set up Flutter
-27:         uses: subosito/flutter-action@v2
-28:         with:
-29:           flutter-version: '3.x'
-30:           channel: 'stable'
-31: 
-32:       - name: Initialize Flutter Project
-33:         run: |
-34:           cd FlutterApp
-35:           flutter create . --platforms=android,ios
-36:           flutter pub get
-37: 
-38:       - name: Build Android APK
-39:         run: |
-40:           cd FlutterApp
-41:           flutter build apk --release
-42: 
-43:       - name: Build iOS IPA (Unsigned)
-44:         run: |
-45:           cd FlutterApp
-46:           flutter build ios --release --no-codesign
-47:           mkdir -p Payload
-48:           cp -r build/ios/iphoneos/Runner.app Payload/
-49:           zip -vr JewelElite_v4.ipa Payload/
-50: 
-51:       - name: Upload Mobile Installers
-52:         uses: actions/upload-artifact@v7
-53:         with:
-54:           name: JewelElite_Mobile_Installers
-55:           path: |
-56:             FlutterApp/build/app/outputs/flutter-apk/app-release.apk
-57:             FlutterApp/JewelElite_v4.ipa
-58: 
-59:   # 2. DESKTOP BUILD (Windows, macOS, Linux)
-60:   desktop-build:
-61:     name: Desktop Build (${{ matrix.os }})
-62:     runs-on: ${{ matrix.os }}
-63:     strategy:
-64:       matrix:
-65:         os: [windows-latest, macos-latest, ubuntu-latest]
-66:     
-67:     steps:
-68:       - name: Checkout Code
-69:         uses: actions/checkout@v5
-70: 
-71:       - name: Set up Python
-72:         uses: actions/setup-python@v6
-73:         with:
-74:           python-version: '3.10'
-75: 
-76:       - name: Install Dependencies
-77:         run: |
-78:           python -m pip install --upgrade pip
-79:           if [ "${{ runner.os }}" == "Windows" ]; then
-80:             pip install pyinstaller -r requirements.txt
-81:           else
-82:             # Filter out MetaTrader5 for Linux/macOS
-83:             grep -v "MetaTrader5" requirements.txt > reqs_linux.txt
-84:             pip install pyinstaller -r reqs_linux.txt
-85:           fi
-86:         shell: bash
-87: 
-88:       - name: Build Executable
-89:         run: |
-90:           pyinstaller --onefile --name "JewelElite_Bot_${{ matrix.os }}" main.py
-91: 
-92:       - name: Upload Desktop Installer
-93:         uses: actions/upload-artifact@v7
-94:         with:
-95:           name: JewelElite_Desktop_${{ matrix.os }}
-96:           path: dist/*
+name: Jewel Elite Multi-Platform Suite
 
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # 1. MOBILE BUILD (Android & iOS)
+  mobile-build:
+    name: Mobile Build (Android & iOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Initialize & Build Flutter
+        run: |
+          cd FlutterApp
+          # Ensure directories exist
+          flutter create . --platforms=android,ios --namespace=com.jewelelite.bot
+          flutter pub get
+          # Build Android
+          flutter build apk --release
+          # Build iOS (Unsigned)
+          flutter build ios --release --no-codesign
+          # Package IPA manually
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -vr ../JewelElite_v4.ipa Payload/
+        shell: bash
+
+      - name: Upload Mobile Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: JewelElite_Mobile_Installers
+          path: |
+            FlutterApp/build/app/outputs/flutter-apk/app-release.apk
+            JewelElite_v4.ipa
+
+  # 2. DESKTOP BUILD (Windows, macOS, Linux)
+  desktop-build:
+    name: Desktop Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev
+        shell: bash
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            pip install pyinstaller -r requirements.txt
+          else
+            # Filter out MetaTrader5 for Linux/macOS
+            grep -v "MetaTrader5" requirements.txt > reqs_linux.txt
+            pip install pyinstaller -r reqs_linux.txt
+          fi
+        shell: bash
+
+      - name: Build Executable
+        run: |
+          pyinstaller --onefile --name "JewelElite_Bot_${{ matrix.os }}" main.py
+        shell: bash
+
+      - name: Upload Desktop Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: JewelElite_Desktop_${{ matrix.os }}
+          path: dist/*
