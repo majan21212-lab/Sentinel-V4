@@ -20,6 +20,7 @@ from platforms.mt5_adapter import MT5Adapter
 from markets.market_bot import MarketBot
 from core.godmode import GodModeEngine
 import state_manager as state
+from cortex.optimizer import CortexOptimizer
 
 
 load_dotenv(override=True)
@@ -44,10 +45,18 @@ async def main():
         log.warning("Platform connection failed. Simulation only.")
 
     market_bots = {}
+    cortex = CortexOptimizer()
+    last_evolution = datetime.now() - timedelta(hours=1)
     
     try:
         while True:
-            # Global Kill Switch
+            # 0. Cortex Evolution Cycle (Run every hour)
+            if datetime.now() - last_evolution > timedelta(hours=1):
+                log.info("Cortex is evolving...")
+                cortex.run_cycle()
+                last_evolution = datetime.now()
+
+            # 1. Global Kill Switch
             if state.SHARED_DATA.get("kill_switch", False):
                 await asyncio.sleep(2)
                 continue
