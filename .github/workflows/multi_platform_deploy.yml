@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  ACTIONS_RUNNER_FORCE_NODE24: true
 
 jobs:
   # 1. MOBILE BUILD (Android & iOS)
@@ -17,10 +17,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 24
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -37,14 +37,14 @@ jobs:
       - name: Initialize & Build Flutter
         run: |
           cd FlutterApp
-          # Ensure directories exist
-          flutter create . --platforms=android,ios --org com.jewelelite.bot
+          # Ensure project is initialized with proper metadata
+          flutter create . --platforms=android,ios --org com.jewelelite.bot --project-name jewel_elite
           flutter pub get
           # Build Android
           flutter build apk --release
           # Build iOS (Unsigned)
           flutter build ios --release --no-codesign
-          # Package IPA manually
+          # Package IPA manually for distribution testing
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
           zip -vr ../JewelElite_v4.ipa Payload/
@@ -96,7 +96,17 @@ jobs:
 
       - name: Build Executable
         run: |
-          pyinstaller --onefile --name "JewelElite_Bot_${{ matrix.os }}" main.py
+          if [ "${{ runner.os }}" == "Windows" ]; then SEP=";"; else SEP=":"; fi
+          pyinstaller --onefile --name "JewelElite_Bot_${{ matrix.os }}" \
+            --add-data ".env.example${SEP}." \
+            --add-data "config.json${SEP}." \
+            --add-data "risk_settings.json${SEP}." \
+            --add-data "shared_state.json${SEP}." \
+            --add-data "web${SEP}web" \
+            --collect-all fastapi \
+            --collect-all uvicorn \
+            --collect-all pydantic \
+            main.py
         shell: bash
 
       - name: Upload Desktop Installer

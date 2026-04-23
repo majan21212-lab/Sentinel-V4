@@ -12,6 +12,8 @@ except (ImportError, OSError):
     mt5 = None
     MT5_AVAILABLE = False
 
+import multiprocessing
+
 from dotenv import load_dotenv
 
 from core.logger import setup_logger
@@ -31,10 +33,15 @@ async def main():
     log.info("Starting Jewel Elite Multi-Market Core...")
 
     pkg_path = os.path.dirname(os.path.abspath(__file__))
-    dashboard_process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "web_server:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"],
-        cwd=pkg_path
+    
+    # Use multiprocessing for PyInstaller compatibility
+    from web_server import run_server
+    dashboard_process = multiprocessing.Process(
+        target=run_server, 
+        kwargs={"host": "0.0.0.0", "port": 8000},
+        daemon=True
     )
+    dashboard_process.start()
 
     risk_manager = RiskManager()
     ai_client = DeepSeekClient()
@@ -104,6 +111,7 @@ async def main():
         dashboard_process.terminate()
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
