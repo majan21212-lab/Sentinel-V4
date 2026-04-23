@@ -61,8 +61,6 @@ class MarketBot:
 
     async def _simulate_execution(self, signal: Signal):
         """Simulates a trade and updates the shared terminal state."""
-        logger.info(f"DEBUG: Signal Type: {type(signal)}")
-        logger.info(f"DEBUG: Signal Attributes: {signal.__dict__.keys() if hasattr(signal, '__dict__') else 'No __dict__'}")
         trade_id = random.randint(10000, 99999)
         
         # Create 'Active' trade
