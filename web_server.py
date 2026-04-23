@@ -18,6 +18,15 @@ import mimetypes
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    import sys
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 active_connections = set()
 logger = logging.getLogger("WEB_SERVER")
 app = FastAPI()
@@ -52,12 +61,13 @@ async def get_analytics():
         return JSONResponse(content=df.set_index('pattern')['accuracy'].to_dict())
     except: return JSONResponse(content={})
 
-if os.path.exists("web"):
-    app.mount("/static", StaticFiles(directory="web"), name="static")
+if os.path.exists(get_resource_path("web")):
+    app.mount("/static", StaticFiles(directory=get_resource_path("web")), name="static")
 
 @app.get("/")
 async def get_index():
-    with open("web/index.html", "r", encoding="utf-8") as f:
+    index_path = get_resource_path("web/index.html")
+    with open(index_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 @app.get("/api/status")
