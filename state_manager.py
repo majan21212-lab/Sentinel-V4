@@ -9,7 +9,10 @@ log = logging.getLogger(__name__)
 # --- SHARED STATE PERSISTENCE ---
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared_state.json")
 
+_LAST_VALID_STATE = None
+
 def load_shared_state():
+    global _LAST_VALID_STATE
     defaults = {
         "prices": {},
         "status": "INITIALIZING",
@@ -34,8 +37,13 @@ def load_shared_state():
             with open(STATE_FILE, "r") as f:
                 saved = json.load(f)
                 defaults.update(saved)
+                _LAST_VALID_STATE = defaults
+                return defaults
         except Exception as e:
-            log.warning(f"State: Error loading state: {e}")
+            # log.warning(f"State: Error loading state: {e}") # Silenced to avoid spamming logs during normal file contention
+            if _LAST_VALID_STATE is not None:
+                return _LAST_VALID_STATE
+            
     return defaults
 
 def save_shared_state(data):

@@ -1,18 +1,20 @@
 import logging
-from typing import List, Dict
 from platforms.base import BasePlatformAdapter
 from platforms.mt5_adapter import MT5Adapter
+from platforms.ccxt_adapter import CCXTAdapter
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Gateway")
 
 class PlatformGateway:
     """Institutional router for managing multiple broker connections."""
     
     def __init__(self):
         self.adapters: Dict[str, BasePlatformAdapter] = {
-            "MT5": MT5Adapter()
+            "MT5": MT5Adapter(),
+            "Binance": CCXTAdapter("binance"),
+            "OKX": CCXTAdapter("okx")
         }
-        self.active_brokers = ["MT5"]
+        self.active_brokers = ["MT5"] # Default active broker
 
     async def connect_all(self):
         for name, adapter in self.adapters.items():

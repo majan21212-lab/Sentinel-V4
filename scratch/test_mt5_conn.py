@@ -10,7 +10,8 @@ def test_mt5():
     server = os.getenv("EXNESS_SERVER")
     
     print(f"Attempting to initialize MT5 with account {login} on server {server}...")
-    if not mt5.initialize(login=login, password=password, server=server):
+    mt5_path = r"C:\Program Files\MetaTrader 5\terminal64.exe"
+    if not mt5.initialize(login=login, password=password, server=server, path=mt5_path):
         print(f"MT5 initialization failed: {mt5.last_error()}")
         return
     

@@ -92,24 +92,42 @@ async def get_signals():
 async def update_settings(request: Request):
     data = await request.json()
     logger.info(f"Updating Settings: {data}")
-    if "auto_trade" in data: SHARED_DATA["auto_trade"] = bool(data["auto_trade"])
-    if "demo_mode" in data: SHARED_DATA["demo_mode"] = bool(data["demo_mode"])
-    if "active_profile" in data: SHARED_DATA["active_profile"] = data["active_profile"]
-    if "strategy_mode" in data: SHARED_DATA["strategy_mode"] = data["strategy_mode"]
+    
     if "is_bot_active" in data: SHARED_DATA["is_bot_active"] = bool(data["is_bot_active"])
-    if "kill_switch" in data: SHARED_DATA["kill_switch"] = bool(data["kill_switch"])
-    if "execution_bias" in data: SHARED_DATA["execution_bias"] = data["execution_bias"]
-    if "active_markets" in data: SHARED_DATA["active_markets"] = data["active_markets"]
+    if "demo_mode" in data: SHARED_DATA["demo_mode"] = bool(data["demo_mode"])
+    if "active_broker" in data: SHARED_DATA["active_broker"] = data["active_broker"]
+    if "strategy_mode" in data: SHARED_DATA["strategy_mode"] = data["strategy_mode"]
     
+    if "active_markets" in data:
+        SHARED_DATA["active_markets"] = data["active_markets"]
+        
+    if "demo_deposit" in data:
+        try:
+            amt = float(data["demo_deposit"])
+            SHARED_DATA["demo_balance"] = SHARED_DATA.get("demo_balance", 200.00) + amt
+        except ValueError:
+            pass
+    
+    if "credentials" in data:
+        creds = data["credentials"]
+        for broker, keys in creds.items():
+            os.environ[f"{broker.upper()}_API_KEY"] = keys["key"]
+            os.environ[f"{broker.upper()}_SECRET"] = keys["secret"]
+            # Persistence
+            with open(".env", "a") as f:
+                f.write(f"\n{broker.upper()}_API_KEY={keys['key']}")
+                f.write(f"\n{broker.upper()}_SECRET={keys['secret']}")
+    
+    # Update Engine State
     executor = state.get_executor()
-    executor.risk_engine.config.active_profile = SHARED_DATA["active_profile"]
-    from models import ExecutionMode
-    executor.risk_engine.config.execution_mode = ExecutionMode.DEMO if SHARED_DATA["demo_mode"] else ExecutionMode.LIVE
+    if executor:
+        from models import ExecutionMode
+        executor.risk_engine.config.execution_mode = ExecutionMode.DEMO if SHARED_DATA["demo_mode"] else ExecutionMode.LIVE
+        SHARED_DATA["risk_config"] = executor.risk_engine.config.dict()
     
-    SHARED_DATA["risk_config"] = executor.risk_engine.config.dict()
-    logger.info(f"Saving State... is_bot_active={SHARED_DATA['is_bot_active']}")
     state.save_shared_state(SHARED_DATA)
-    return JSONResponse(content={"status": "success", "config": SHARED_DATA["risk_config"]})
+    logger.info(f"Saving State... is_bot_active={SHARED_DATA.get('is_bot_active')}")
+    return JSONResponse(content={"status": "success", "config": SHARED_DATA.get("risk_config", {})})
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -125,8 +143,11 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 async def broadcast_data():
+    global SHARED_DATA
     while True:
         try:
+            # Sync from disk since core bot is in a different process
+            SHARED_DATA = state.load_shared_state()
             if active_connections:
                 payload = json.dumps(SHARED_DATA)
                 disconnected = set()
@@ -139,7 +160,7 @@ async def broadcast_data():
                     active_connections.remove(ws)
         except Exception as e:
             print(f"Broadcast Error: {e}")
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(1.0) # Sync every second
 
 @app.on_event("startup")
 async def startup_event():

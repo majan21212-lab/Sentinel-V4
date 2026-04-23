@@ -41,11 +41,11 @@ class MT5Adapter(BasePlatformAdapter):
                 logger.error(f"MT5 Initialisation Failed: Account Login ({login}) must be an integer, not a string/username!")
                 return False
 
-            if not mt5.initialize(login=login_int, password=password, server=server):
+            if not mt5.initialize(login=login_int, password=password, server=server, path=r"C:\Program Files\MetaTrader 5\terminal64.exe"):
                 logger.error(f"MT5 Initialisation Failed with credentials: {mt5.last_error()}")
                 return False
         else:
-            if not mt5.initialize():
+            if not mt5.initialize(path=r"C:\Program Files\MetaTrader 5\terminal64.exe"):
                 logger.error(f"MT5 Initialisation Failed (no credentials): {mt5.last_error()}")
                 return False
         

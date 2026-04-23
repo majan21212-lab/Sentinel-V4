@@ -97,6 +97,13 @@ jobs:
       - name: Build Executable
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then SEP=";"; else SEP=":"; fi
+          
+          # Ensure required JSON files exist to prevent PyInstaller crash
+          [ ! -f config.json ] && echo "{}" > config.json
+          [ ! -f risk_settings.json ] && echo "{}" > risk_settings.json
+          [ ! -f shared_state.json ] && echo "{}" > shared_state.json
+          [ ! -f .env.example ] && touch .env.example
+
           pyinstaller --onefile --name "JewelElite_Bot_${{ matrix.os }}" \
             --add-data ".env.example${SEP}." \
             --add-data "config.json${SEP}." \

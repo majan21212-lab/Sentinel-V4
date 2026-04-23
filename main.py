@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from core.logger import setup_logger
 from core.risk import RiskManager
 from ai.deepseek_client import DeepSeekClient
-from platforms.mt5_adapter import MT5Adapter
+from platforms.gateway import PlatformGateway
 from markets.market_bot import MarketBot
 from core.godmode import GodModeEngine
 import state_manager as state
@@ -45,12 +45,10 @@ async def main():
 
     risk_manager = RiskManager()
     ai_client = DeepSeekClient()
-    platform = MT5Adapter()
+    gateway = PlatformGateway()
     
-    try:
-        await platform.connect()
-    except:
-        log.warning("Platform connection failed. Simulation only.")
+    # Connect all configured platforms
+    await gateway.connect_all()
 
     market_bots = {}
     cortex = CortexOptimizer()
@@ -77,10 +75,16 @@ async def main():
                 continue
 
             # Sync Market Bots with Shared State
-            active_symbols = state.SHARED_DATA.get("active_markets", [])
+            active_symbols = state.SHARED_DATA.get("active_markets", ["XAUUSDm", "BTCUSDm"])
+            active_broker_name = state.SHARED_DATA.get("active_broker", "DEMO")
+            platform = gateway.adapters.get(active_broker_name, gateway.adapters["MT5"])
+
             for sym in active_symbols:
                 if sym not in market_bots:
                     market_bots[sym] = MarketBot(platform, risk_manager, ai_client, symbol=sym)
+                else:
+                    # Update platform if it changed in settings
+                    market_bots[sym].platform = platform
 
             strategy_mode = state.SHARED_DATA.get("strategy_mode", "PATTERN")
             for symbol in active_symbols:

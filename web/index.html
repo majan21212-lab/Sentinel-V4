@@ -24,6 +24,10 @@
             <div class="card glass balance-card">
                 <div id="balance-display">$3,968.82</div>
                 <div id="equity-display" class="free-margin">Free margin: $3,940.08</div>
+                <div id="demo-deposit-container" style="display: none; margin-top: 10px; justify-content: space-between; gap: 10px;">
+                    <input type="number" id="deposit-amount" placeholder="Amount ($)" class="config-input" style="width: 60%; padding: 4px;">
+                    <button onclick="depositFunds()" class="activate-btn" style="flex: 1; padding: 4px; font-size: 0.8rem;">Deposit</button>
+                </div>
             </div>
         </div>
     </header>
@@ -110,9 +114,42 @@
             </div>
 
             <div class="card glass">
-                <div class="card-title">Detection Feed</div>
+                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>Detection Feed</span>
+                    <select id="signal-filter" onchange="renderSignals(lastSignalArray)" style="background: rgba(0,0,0,0.5); color: white; border: 1px solid var(--accent-neon); border-radius: 4px; padding: 2px; font-size: 0.7rem;">
+                        <option value="ALL">All Signals</option>
+                        <option value="LONG">Buy (Long)</option>
+                        <option value="SHORT">Sell (Short)</option>
+                    </select>
+                </div>
                 <div class="signal-feed" id="signal-list">
                     <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div class="card glass">
+                <div class="card-title">Active Markets</div>
+                <div id="market-checkboxes" style="margin-top: 10px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px;">
+                    <!-- Populated by JS -->
+                </div>
+                <button class="activate-btn" onclick="saveMarkets()" style="margin-top: 10px; width: 100%; font-size: 0.8rem; padding: 8px;">Apply Markets</button>
+            </div>
+
+            <div class="card glass">
+                <div class="card-title">Broker Connectivity</div>
+                <div class="control-group" style="margin-top: 10px;">
+                    <label>Active Platform</label>
+                    <select class="config-select" id="active-broker-select" style="width: 100%; margin-top: 8px; border-color: var(--accent-neon);">
+                        <option value="DEMO">Demo Simulation</option>
+                        <option value="MT5">MetaTrader 5 (Exness/XTB)</option>
+                        <option value="BINANCE">Binance Global</option>
+                        <option value="OKX">OKX Institutional</option>
+                    </select>
+                </div>
+                <div id="broker-credentials" style="display: none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                    <input type="password" id="api-key-input" placeholder="API Key" class="config-input" style="width: 100%; margin-bottom: 8px;">
+                    <input type="password" id="api-secret-input" placeholder="API Secret" class="config-input" style="width: 100%; margin-bottom: 8px;">
+                    <button class="activate-btn" onclick="saveCredentials()" style="width: 100%; font-size: 0.8rem; padding: 8px;">Link Wallet</button>
                 </div>
             </div>
 
@@ -130,6 +167,6 @@
         </aside>
     </main>
 
-    <script src="static/app.js"></script>
+    <script src="static/app.js?v=1.0.5"></script>
 </body>
 </html>

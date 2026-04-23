@@ -77,6 +77,7 @@ class MarketBot:
         }
         
         state.SHARED_DATA["active_trades"].append(new_trade)
+        state.save_shared_state(state.SHARED_DATA)
         
         # Simulate trade lifecycle
         asyncio.create_task(self._simulate_trade_closure(trade_id))
@@ -96,4 +97,5 @@ class MarketBot:
             trade["pnl"] = round(profit, 2)
             state.SHARED_DATA["demo_balance"] += profit
             state.SHARED_DATA["trade_history"].insert(0, trade)
+            state.save_shared_state(state.SHARED_DATA)
             logger.info(f"[{self.symbol}] Trade {trade_id} closed with PnL: ${profit:.2f}")
