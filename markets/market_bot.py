@@ -47,7 +47,7 @@ class MarketBot:
             is_demo = state.SHARED_DATA.get("demo_mode", True)
             if not is_demo:
                 logger.info(f"[{self.symbol}] Dispatching LIVE order to Platform...")
-                res = self.platform.place_order(signal.dict())
+                res = await self.platform.place_order(signal)
                 if res.get("status") == "success":
                     logger.info(f"[{self.symbol}] Order Successfully Placed: {res.get('order_id', res.get('ticket'))}")
                 else:
@@ -61,6 +61,8 @@ class MarketBot:
 
     async def _simulate_execution(self, signal: Signal):
         """Simulates a trade and updates the shared terminal state."""
+        logger.info(f"DEBUG: Signal Type: {type(signal)}")
+        logger.info(f"DEBUG: Signal Attributes: {signal.__dict__.keys() if hasattr(signal, '__dict__') else 'No __dict__'}")
         trade_id = random.randint(10000, 99999)
         
         # Create 'Active' trade
@@ -69,8 +71,8 @@ class MarketBot:
             "symbol": self.symbol,
             "direction": signal.direction,
             "entry": signal.entry,
-            "tp": signal.tp,
-            "sl": signal.sl,
+            "tp": signal.take_profit_1,
+            "sl": signal.stop_loss,
             "status": "ACTIVE",
             "pnl": 0.0,
             "created_at": "JUST NOW"

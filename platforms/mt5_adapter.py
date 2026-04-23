@@ -192,6 +192,7 @@ class MT5Adapter(BasePlatformAdapter):
                 'tick_volume': [np.random.randint(100, 1000) for _ in range(lookback)]
             })
             df['volume'] = df['tick_volume']
+            df.set_index('time', inplace=True)
             return df
             
         rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, lookback)
@@ -202,6 +203,6 @@ class MT5Adapter(BasePlatformAdapter):
         
         df = pd.DataFrame(rates)
         df['time'] = pd.to_datetime(df['time'], unit='s')
-        # Map tick_volume to volume for strategy consistency
         df['volume'] = df['tick_volume']
+        df.set_index('time', inplace=True)
         return df
