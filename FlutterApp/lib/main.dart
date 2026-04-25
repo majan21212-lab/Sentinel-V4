@@ -192,7 +192,12 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
               Text("Free margin: \$$_equity", style: const TextStyle(color: ThemeColors.textGrey, fontSize: 14)),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () {
+                  _api.updateSettings({"demo_deposit": 1000});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("🚀 $1,000 Deposit Successful!"), backgroundColor: ThemeColors.successGreen)
+                  );
+                },
                 icon: const Icon(Icons.file_upload_outlined, size: 18),
                 label: const Text("Deposit"),
                 style: ElevatedButton.styleFrom(
@@ -227,28 +232,90 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
           const SizedBox(height: 15),
           LinearProgressIndicator(value: 0.5, backgroundColor: Colors.white10, color: ThemeColors.accentPurple, borderRadius: BorderRadius.circular(10), minHeight: 6),
           const SizedBox(height: 20),
-          _checklistTile("Create Jewel Elite account", true),
-          _checklistTile("Start your first bot", true),
-          _checklistTile("Connect a trading account", false),
-          _checklistTile("Choose your plan", false),
+          _checklistTile("Create Jewel Elite account", true, () {}),
+          _checklistTile("Start your first bot", true, () {}),
+          _checklistTile("Connect a trading account", false, () => _showBrokerDialog()),
+          _checklistTile("Choose your plan", false, () {}),
         ],
       ),
     );
   }
 
-  Widget _checklistTile(String title, bool done) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(color: done ? ThemeColors.accentPurple : Colors.transparent, border: Border.all(color: Colors.white24), shape: BoxShape.circle),
-            child: Icon(Icons.check, size: 14, color: done ? Colors.white : Colors.transparent),
+  void _showBrokerDialog() {
+    String selectedBroker = "Binance";
+    final keyController = TextEditingController();
+    final secretController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ThemeColors.surface,
+        title: const Text("Connect Broker", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              value: selectedBroker,
+              dropdownColor: ThemeColors.surface,
+              style: const TextStyle(color: Colors.white),
+              items: ["Binance", "OKX", "Alpaca", "Exness"].map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+              onChanged: (v) => selectedBroker = v!,
+              decoration: const InputDecoration(labelText: "Broker", labelStyle: TextStyle(color: ThemeColors.textGrey)),
+            ),
+            TextField(
+              controller: keyController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: "API Key", labelStyle: TextStyle(color: ThemeColors.textGrey)),
+            ),
+            TextField(
+              controller: secretController,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: "Secret Key", labelStyle: TextStyle(color: ThemeColors.textGrey)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () {
+              _api.updateSettings({
+                "credentials": {
+                  selectedBroker: {"key": keyController.text, "secret": secretController.text}
+                },
+                "active_broker": selectedBroker,
+                "demo_mode": false
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("✅ Connecting to $selectedBroker..."), backgroundColor: ThemeColors.accentPurple)
+              );
+            },
+            child: const Text("Connect"),
           ),
-          const SizedBox(width: 12),
-          Text(title, style: TextStyle(color: done ? Colors.white : ThemeColors.textGrey)),
         ],
+      ),
+    );
+  }
+
+  Widget _checklistTile(String title, bool done, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(color: done ? ThemeColors.accentPurple : Colors.transparent, border: Border.all(color: Colors.white24), shape: BoxShape.circle),
+              child: Icon(Icons.check, size: 14, color: done ? Colors.white : Colors.transparent),
+            ),
+            const SizedBox(width: 12),
+            Text(title, style: TextStyle(color: done ? Colors.white : ThemeColors.textGrey)),
+            const Spacer(),
+            if (!done) const Icon(Icons.chevron_right, size: 16, color: ThemeColors.textGrey),
+          ],
+        ),
       ),
     );
   }
