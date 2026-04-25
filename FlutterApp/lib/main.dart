@@ -307,7 +307,7 @@ class _MainTerminalViewState extends State<MainTerminalView> {
             ],
           ),
           const SizedBox(height: 15),
-          Text(sig.pattern, style: const TextStyle(color: TerminalColors.textSecondary, fontSize: 10, italic: true)),
+          Text(sig.pattern, style: const TextStyle(color: TerminalColors.textSecondary, fontSize: 10, fontStyle: FontStyle.italic)),
         ],
       ),
     );
