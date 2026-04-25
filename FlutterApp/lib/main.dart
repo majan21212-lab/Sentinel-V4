@@ -48,8 +48,8 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   final ApiService _api = ApiService();
   late TabController _tabController;
   
-  String _balance = "3,968.82";
-  String _equity = "3,940.08";
+  String _balance = "0.00";
+  String _equity = "0.00";
   bool _autoTrade = false;
   List<TradeSignal> _signals = [];
 
@@ -198,6 +198,9 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   }
 
   Widget _buildTabSection() {
+    final openCount = _signals.where((s) => s.status.toUpperCase() == "OPEN").length;
+    final pendingCount = _signals.where((s) => s.status.toUpperCase() == "PENDING").length;
+
     return TabBar(
       controller: _tabController,
       dividerColor: Colors.transparent,
@@ -205,8 +208,8 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
       labelColor: Colors.white,
       unselectedLabelColor: ThemeColors.textGrey,
       tabs: [
-        Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Open "), Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)), child: const Text("3", style: TextStyle(fontSize: 10)))])),
-        Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Pending "), Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)), child: const Text("12", style: TextStyle(fontSize: 10)))])),
+        Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Open "), Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)), child: Text("$openCount", style: const TextStyle(fontSize: 10)))])),
+        Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Pending "), Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)), child: Text("$pendingCount", style: const TextStyle(fontSize: 10)))])),
         const Tab(text: "Closed"),
       ],
     );

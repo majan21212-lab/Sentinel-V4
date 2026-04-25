@@ -5,18 +5,18 @@ Since you are running on Windows, we are using a **Cloud Build + Sideloadly** wo
 ---
 
 ## 🛠️ Step 1: Generate the Installer
-1. **Push your code to GitHub**: Ensure the `iOSApp` folder and `.github` folder are in your repository.
+  1. **Push your code to GitHub**: Ensure the `FlutterApp` folder and `.github` folder are in your repository.
 2. **Go to "Actions" Tab**: In your GitHub repository, click on the **Actions** tab at the top.
 3. **Download Artifact**:
-   - Find the latest run of "Build iOS Installer".
+   - Find the latest run of **"Build Flutter iOS Installer"**.
    - Once finished, scroll down to the "Artifacts" section.
-   - Download the `TradeBot_iOS_Installer` zip and extract the `JewelElite_Unsigned.ipa`.
+   - Download the `JewelElite_Flutter_IPA` zip and extract the `JewelElite_Flutter.ipa`.
 
 ## 🚀 Step 2: Install on iPhone
 1. **Download Sideloadly**: Go to [sideloadly.io](https://sideloadly.io/) and install it on your Windows PC.
 2. **Connect iPhone**: Plug your iPhone into your PC via USB. (Ensure you "Trust" the computer on the phone).
 3. **Open Sideloadly**:
-   - **IPA File**: Drag and drop the `JewelElite_Unsigned.ipa` into the Sideloadly window.
+   - **IPA File**: Drag and drop the `JewelElite_Flutter.ipa` into the Sideloadly window.
    - **Apple ID**: Enter your Free Apple ID (email).
    - **Start**: Click "Start". You may be asked for your Apple ID password (this is sent securely to Apple for signing).
 4. **Trust the App**:
@@ -31,5 +31,17 @@ Since you are running on Windows, we are using a **Cloud Build + Sideloadly** wo
 ---
 
 ### 🔍 Troubleshooting
-- **No Device Found**: Ensure iTunes is installed and identifies your iPhone.
+
+- **No Device Found (Most Common)**:
+  1. **Check iTunes**: Open iTunes. If your iPhone isn't showing up there, Sideloadly won't see it either.
+  2. **Install iTunes (Web Version)**: If you installed iTunes from the Microsoft Store, it often fails to provide the right drivers. **Uninstall it** and download the 64-bit version directly from [Apple's website](https://www.apple.com/itunes/download/win64).
+  3. **Trust Computer**: Unlock your iPhone and tap **"Trust"** when the popup appears.
+  4. **Restart Services**: Press `Win + R`, type `services.msc`, and restart **Apple Mobile Device Service**.
+
 - **Signing Error**: Check if your Apple ID has 2FA enabled; Sideloadly will prompt for the code.
+- **Connection Timeout (WinError 10060)**:
+  1. **Use a VPN**: If you are in a region where Apple services are restricted, try using a VPN. If you are already using one, try disabling it or switching servers.
+  2. **Anisette Settings**: In Sideloadly, click **Advanced Options** and change **Anisette Authentication** from `Local` to `Remote` (or vice versa).
+  3. **Firewall**: Ensure `Sideloadly.exe` is allowed through your Windows Firewall.
+  4. **DNS**: Try changing your PC DNS to Google (`8.8.8.8`) or Cloudflare (`1.1.1.1`).
+
