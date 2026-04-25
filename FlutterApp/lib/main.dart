@@ -86,20 +86,76 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
         child: Column(
           children: [
             _buildJewelEliteHeader(),
+            _buildMasterControl(),
             _buildChecklist(),
             _buildTabSection(),
             Expanded(
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildSignalList(_signals.where((s) => s.status == "OPEN").toList()),
-                  _buildSignalList(_signals.where((s) => s.status == "PENDING").toList()),
-                  _buildSignalList(_signals.where((s) => s.status == "CLOSED").toList()),
+                  _buildSignalList(_signals.where((s) => s.status.toUpperCase() == "OPEN").toList()),
+                  _buildSignalList(_signals.where((s) => s.status.toUpperCase() == "PENDING").toList()),
+                  _buildSignalList(_signals.where((s) => s.status.toUpperCase() == "CLOSED").toList()),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMasterControl() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _autoTrade = !_autoTrade);
+                _api.updateSettings({"auto_trade": _autoTrade});
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                decoration: BoxDecoration(
+                  color: _autoTrade ? ThemeColors.successGreen.withOpacity(0.1) : ThemeColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _autoTrade ? ThemeColors.successGreen : Colors.white10),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.bolt, color: _autoTrade ? ThemeColors.successGreen : ThemeColors.textGrey),
+                    const SizedBox(height: 4),
+                    Text(_autoTrade ? "AUTO: ON" : "AUTO: OFF", 
+                      style: TextStyle(color: _autoTrade ? ThemeColors.successGreen : Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _fetchSignals(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                decoration: BoxDecoration(
+                  color: ThemeColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(Icons.refresh, color: Colors.white),
+                    const SizedBox(height: 4),
+                    Text("SCAN NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
