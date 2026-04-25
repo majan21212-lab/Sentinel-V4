@@ -1,62 +1,57 @@
 import 'package:flutter/material.dart';
-import 'package:glassmorphism/glassmorphism.dart';
 import 'dart:async';
 import 'services/api_service.dart';
 import 'models/trade_models.dart';
 
 void main() {
-  runApp(const GeneralAutomationApp());
+  runApp(const JewelEliteTerminal());
 }
 
-class ThemeColors {
-  static const background = Color(0xFF000000); // Deepest Black
-  static const surface = Color(0xFF111111); // Elevated Surface
-  static const primaryGold = Color(0xFFD4AF37);
-  static const accentPurple = Color(0xFF6200EE);
-  static const successGreen = Color(0xFF00C853);
-  static const errorRed = Color(0xFFFF1744);
-  static const textGrey = Color(0xFF888888);
+class TerminalColors {
+  static const bg = Color(0xFF0A0A0A);
+  static const surface = Color(0xFF141414);
+  static const accentCyan = Color(0xFF00E5FF);
+  static const accentYellow = Color(0xFFFBC02D);
+  static const accentGreen = Color(0xFF00C853);
+  static const accentRed = Color(0xFFFF1744);
+  static const textSecondary = Color(0xFF666666);
+  static const gridLine = Color(0xFF1A1A1A);
 }
 
-class GeneralAutomationApp extends StatelessWidget {
-  const GeneralAutomationApp({super.key});
+class JewelEliteTerminal extends StatelessWidget {
+  const JewelEliteTerminal({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true).copyWith(
-        scaffoldBackgroundColor: ThemeColors.background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: ThemeColors.accentPurple,
-          brightness: Brightness.dark,
-        ),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: TerminalColors.bg,
       ),
-      home: const DashboardView(),
+      home: const MainTerminalView(),
     );
   }
 }
 
-class DashboardView extends StatefulWidget {
-  const DashboardView({super.key});
+class MainTerminalView extends StatefulWidget {
+  const MainTerminalView({super.key});
 
   @override
-  State<DashboardView> createState() => _DashboardViewState();
+  State<MainTerminalView> createState() => _MainTerminalViewState();
 }
 
-class _DashboardViewState extends State<DashboardView> with SingleTickerProviderStateMixin {
+class _MainTerminalViewState extends State<MainTerminalView> {
   final ApiService _api = ApiService();
-  late TabController _tabController;
+  int _selectedIndex = 0;
   
-  String _balance = "0.00";
-  String _equity = "0.00";
-  bool _autoTrade = false;
+  String _balance = "103,500.00";
+  String _equity = "98,420.00";
+  bool _isDemo = true;
   List<TradeSignal> _signals = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _startListening();
   }
 
@@ -64,9 +59,8 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
     _api.marketStream.listen((data) {
       if (mounted) {
         setState(() {
-          if (data['auto_trade'] != null) _autoTrade = data['auto_trade'];
           if (data['balance'] != null) _balance = data['balance'].toStringAsFixed(2);
-          if (data['equity'] != null) _equity = data['equity'].toStringAsFixed(2);
+          if (data['demo_mode'] != null) _isDemo = data['demo_mode'];
         });
       }
     });
@@ -81,314 +75,283 @@ class _DashboardViewState extends State<DashboardView> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ThemeColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildJewelEliteHeader(),
-            _buildMasterControl(),
-            _buildChecklist(),
-            _buildTabSection(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildSignalList(_signals.where((s) => s.status.toUpperCase() == "OPEN").toList()),
-                  _buildSignalList(_signals.where((s) => s.status.toUpperCase() == "PENDING").toList()),
-                  _buildSignalList(_signals.where((s) => s.status.toUpperCase() == "CLOSED").toList()),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMasterControl() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Row(
+      body: Stack(
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() => _autoTrade = !_autoTrade);
-                _api.updateSettings({"auto_trade": _autoTrade});
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                decoration: BoxDecoration(
-                  color: _autoTrade ? ThemeColors.successGreen.withOpacity(0.1) : ThemeColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _autoTrade ? ThemeColors.successGreen : Colors.white10),
+          _buildGridBackground(),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      children: [
+                        _buildEquityCard(),
+                        const SizedBox(height: 20),
+                        _buildRiskManagementCard(),
+                        const SizedBox(height: 100), // Bottom padding
+                      ],
+                    ),
+                  ),
                 ),
-                child: Column(
-                  children: [
-                    Icon(Icons.bolt, color: _autoTrade ? ThemeColors.successGreen : ThemeColors.textGrey),
-                    const SizedBox(height: 4),
-                    Text(_autoTrade ? "AUTO: ON" : "AUTO: OFF", 
-                      style: TextStyle(color: _autoTrade ? ThemeColors.successGreen : Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                  ],
-                ),
-              ),
+              ],
             ),
           ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _fetchSignals(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                decoration: BoxDecoration(
-                  color: ThemeColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(Icons.refresh, color: Colors.white),
-                    const SizedBox(height: 4),
-                    Text("SCAN NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          _buildBottomNav(),
         ],
       ),
     );
   }
 
-  Widget _buildJewelEliteHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: GlassmorphicContainer(
-        width: double.infinity,
-        height: 180,
-        borderRadius: 24,
-        blur: 20,
-        alignment: Alignment.center,
-        border: 1,
-        linearGradient: LinearGradient(colors: [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)]),
-        borderGradient: LinearGradient(colors: [Colors.white.withOpacity(0.1), Colors.transparent]),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.gamepad, color: ThemeColors.textGrey, size: 16),
-                  const SizedBox(width: 8),
-                  const Text("Demo account", style: TextStyle(color: ThemeColors.textGrey, fontSize: 14)),
-                  const Spacer(),
-                  const Icon(Icons.keyboard_arrow_right, color: ThemeColors.textGrey),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text("\$$_balance", style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 4),
-              Text("Free margin: \$$_equity", style: const TextStyle(color: ThemeColors.textGrey, fontSize: 14)),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () {
-                  _api.updateSettings({"demo_deposit": 1000});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("🚀 $1,000 Deposit Successful!"), backgroundColor: ThemeColors.successGreen)
-                  );
-                },
-                icon: const Icon(Icons.file_upload_outlined, size: 18),
-                label: const Text("Deposit"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ThemeColors.surface,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 45),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ],
-          ),
-        ),
+  Widget _buildGridBackground() {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: GridPainter(),
       ),
     );
   }
 
-  Widget _buildChecklist() {
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(25),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("TERMINAL", style: TextStyle(color: TerminalColors.textSecondary, letterSpacing: 2, fontSize: 10, fontWeight: FontWeight.w900)),
+              const Text("DASHBOARD", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1)),
+            ],
+          ),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+            child: Row(
+              children: [
+                _modeToggle("LIVE", !_isDemo),
+                _modeToggle("DEMO", _isDemo),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _modeToggle(String label, bool active) {
+    return GestureDetector(
+      onTap: () {
+        setState(() => _isDemo = label == "DEMO");
+        _api.updateSettings({"demo_mode": _isDemo});
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? TerminalColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(label, style: TextStyle(color: active ? Colors.white : TerminalColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildEquityCard() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: ThemeColors.surface, borderRadius: BorderRadius.circular(24)),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: TerminalColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.show_chart, color: TerminalColors.accentYellow, size: 20),
+              ),
+              const SizedBox(width: 15),
+              Text("TOTAL EQUITY BALANCE", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 25),
+          Text("\$$_balance", style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w900, fontFamily: 'monospace')),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: TerminalColors.accentGreen.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.trending_up, color: TerminalColors.accentGreen, size: 14),
+                    const SizedBox(width: 4),
+                    const Text("+0.00%", style: TextStyle(color: TerminalColors.accentGreen, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text("TODAY'S PERFORMANCE", style: TextStyle(color: TerminalColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 30),
+          Divider(color: Colors.white.withOpacity(0.05)),
+          const SizedBox(height: 10),
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Get started checklist", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const Icon(Icons.keyboard_arrow_up),
-            ],
-          ),
-          const SizedBox(height: 15),
-          LinearProgressIndicator(value: 0.5, backgroundColor: Colors.white10, color: ThemeColors.accentPurple, borderRadius: BorderRadius.circular(10), minHeight: 6),
-          const SizedBox(height: 20),
-          _checklistTile("Create Jewel Elite account", true, () {}),
-          _checklistTile("Start your first bot", true, () {}),
-          _checklistTile("Connect a trading account", false, () => _showBrokerDialog()),
-          _checklistTile("Choose your plan", false, () {}),
-        ],
-      ),
-    );
-  }
-
-  void _showBrokerDialog() {
-    String selectedBroker = "Binance";
-    final keyController = TextEditingController();
-    final secretController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ThemeColors.surface,
-        title: const Text("Connect Broker", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: selectedBroker,
-              dropdownColor: ThemeColors.surface,
-              style: const TextStyle(color: Colors.white),
-              items: ["Binance", "OKX", "Alpaca", "Exness"].map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
-              onChanged: (v) => selectedBroker = v!,
-              decoration: const InputDecoration(labelText: "Broker", labelStyle: TextStyle(color: ThemeColors.textGrey)),
-            ),
-            TextField(
-              controller: keyController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: "API Key", labelStyle: TextStyle(color: ThemeColors.textGrey)),
-            ),
-            TextField(
-              controller: secretController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: "Secret Key", labelStyle: TextStyle(color: ThemeColors.textGrey)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(
-            onPressed: () {
-              _api.updateSettings({
-                "credentials": {
-                  selectedBroker: {"key": keyController.text, "secret": secretController.text}
-                },
-                "active_broker": selectedBroker,
-                "demo_mode": false
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("✅ Connecting to $selectedBroker..."), backgroundColor: ThemeColors.accentPurple)
-              );
-            },
-            child: const Text("Connect"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _checklistTile(String title, bool done, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(color: done ? ThemeColors.accentPurple : Colors.transparent, border: Border.all(color: Colors.white24), shape: BoxShape.circle),
-              child: Icon(Icons.check, size: 14, color: done ? Colors.white : Colors.transparent),
-            ),
-            const SizedBox(width: 12),
-            Text(title, style: TextStyle(color: done ? Colors.white : ThemeColors.textGrey)),
-            const Spacer(),
-            if (!done) const Icon(Icons.chevron_right, size: 16, color: ThemeColors.textGrey),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabSection() {
-    final openCount = _signals.where((s) => s.status.toUpperCase() == "OPEN").length;
-    final pendingCount = _signals.where((s) => s.status.toUpperCase() == "PENDING").length;
-
-    return TabBar(
-      controller: _tabController,
-      dividerColor: Colors.transparent,
-      indicatorColor: ThemeColors.accentPurple,
-      labelColor: Colors.white,
-      unselectedLabelColor: ThemeColors.textGrey,
-      tabs: [
-        Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Open "), Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)), child: Text("$openCount", style: const TextStyle(fontSize: 10)))])),
-        Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Pending "), Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)), child: Text("$pendingCount", style: const TextStyle(fontSize: 10)))])),
-        const Tab(text: "Closed"),
-      ],
-    );
-  }
-
-  Widget _buildSignalList(List<TradeSignal> signals) {
-    if (signals.isEmpty) {
-      return const Center(child: Text("No signals detected", style: TextStyle(color: ThemeColors.textGrey)));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: signals.length,
-      itemBuilder: (context, index) => _buildTradeCard(signals[index]),
-    );
-  }
-
-  Widget _buildTradeCard(TradeSignal sig) {
-    final isBuy = sig.direction.toUpperCase() == "LONG" || sig.direction.toUpperCase() == "BUY";
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18, 
-            backgroundColor: isBuy ? ThemeColors.successGreen.withOpacity(0.1) : ThemeColors.errorRed.withOpacity(0.1), 
-            child: Text(sig.symbol.contains("XAU") ? "🏆" : "📈", style: const TextStyle(fontSize: 18))
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(sig.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Row(
-                children: [
-                  Text(isBuy ? "Buy " : "Sell ", style: TextStyle(color: isBuy ? ThemeColors.successGreen : ThemeColors.errorRed, fontSize: 12)),
-                  Text("${sig.entry} at ${sig.timeframe}", style: const TextStyle(color: ThemeColors.textGrey, fontSize: 12)),
-                ],
-              ),
+              Text("WIN RATE", style: TextStyle(color: TerminalColors.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
               Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-                child: Text(sig.pattern, style: const TextStyle(color: ThemeColors.textGrey, fontSize: 10)),
-              ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: TerminalColors.accentCyan.withOpacity(0.05), border: Border.all(color: TerminalColors.accentCyan.withOpacity(0.2)), borderRadius: BorderRadius.circular(4)),
+                child: const Text("50.0%", style: TextStyle(color: TerminalColors.accentCyan, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+              )
             ],
-          ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(sig.createdAt, style: const TextStyle(color: ThemeColors.textGrey, fontSize: 12)),
-              Text(sig.direction, style: TextStyle(color: isBuy ? ThemeColors.successGreen : ThemeColors.errorRed, fontWeight: FontWeight.bold)),
-            ],
-          ),
+          )
         ],
       ),
     );
   }
+
+  Widget _buildRiskManagementCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: TerminalColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.shield_outlined, color: TerminalColors.accentYellow, size: 18),
+              const SizedBox(width: 10),
+              Text("RISK MANAGEMENT", style: TextStyle(color: Colors.white, fontSize: 12, letterSpacing: 1.5, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 25),
+          Row(
+            children: [
+              _riskBox("EXPOSURE", "12.5%"),
+              const SizedBox(width: 15),
+              _riskBox("SIGNALS", "${_signals.length}"),
+            ],
+          ),
+          const SizedBox(height: 30),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("DAILY DRAWDOWN", style: TextStyle(color: TerminalColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold)),
+              RichText(text: const TextSpan(children: [
+                TextSpan(text: "1.2%", style: TextStyle(color: TerminalColors.accentRed, fontWeight: FontWeight.bold, fontSize: 10)),
+                TextSpan(text: " / 5.0%", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)),
+              ])),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(value: 0.24, backgroundColor: Colors.white.withOpacity(0.05), color: TerminalColors.accentYellow, minHeight: 6),
+          ),
+          const SizedBox(height: 30),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: TerminalColors.accentGreen.withOpacity(0.03), border: Border.all(color: TerminalColors.accentGreen.withOpacity(0.1)), borderRadius: BorderRadius.circular(12)),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("AVAILABLE CAPACITY", style: TextStyle(color: TerminalColors.accentGreen, fontSize: 10, fontWeight: FontWeight.bold)),
+                Text("87.5%", style: TextStyle(color: TerminalColors.accentGreen, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _riskBox(String title, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.03))),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: TerminalColors.textSecondary, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const SizedBox(height: 8),
+            Text(value, style: const TextStyle(color: TerminalColors.accentCyan, fontSize: 18, fontWeight: FontWeight.w900, fontFamily: 'monospace')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        height: 90,
+        decoration: BoxDecoration(
+          color: TerminalColors.bg,
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _navItem(0, Icons.grid_view_rounded, "DASHBOARD"),
+            _navItem(1, Icons.bolt, "SIGNALS"),
+            _navItem(2, Icons.analytics_outlined, "MARKETS"),
+            _navItem(3, Icons.menu_book_outlined, "STRATEGIES"),
+            _navItem(4, Icons.person_outline, "PROFILE"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(int index, IconData icon, String label) {
+    bool active = _selectedIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndex = index),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: active ? TerminalColors.accentYellow : TerminalColors.textSecondary, size: 24),
+          const SizedBox(height: 6),
+          Text(label, style: TextStyle(color: active ? TerminalColors.accentYellow : TerminalColors.textSecondary, fontSize: 8, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
+class GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = TerminalColors.gridLine
+      ..strokeWidth = 0.5;
+
+    const spacing = 30.0;
+    for (var i = 0.0; i < size.width; i += spacing) {
+      canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
+    }
+    for (var i = 0.0; i < size.height; i += spacing) {
+      canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
