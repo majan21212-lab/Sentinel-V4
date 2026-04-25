@@ -150,17 +150,17 @@ struct BrokerSection: View {
             
             // Stats Row
             HStack(spacing: 20) {
-                VStack(align: .leading) {
+                VStack(alignment: .leading) {
                     Text("BALANCE").font(.system(size: 8)).foregroundColor(.secondary)
                     Text("$\(Int(account.summary.balance))").font(.system(size: 12, weight: .bold))
                 }
                 
-                VStack(align: .leading) {
+                VStack(alignment: .leading) {
                     Text("AVAILABLE").font(.system(size: 8)).foregroundColor(.secondary)
                     Text("$\(Int(account.summary.available))").font(.system(size: 12, weight: .bold))
                 }
                 
-                VStack(align: .leading) {
+                VStack(alignment: .leading) {
                     Text("POSITIONS").font(.system(size: 8)).foregroundColor(.secondary)
                     Text("\(account.summary.openPositions)").font(.system(size: 12, weight: .bold))
                 }
@@ -171,7 +171,7 @@ struct BrokerSection: View {
                 VStack(spacing: 8) {
                     ForEach(account.positions) { pos in
                         HStack {
-                            VStack(align: .leading) {
+                            VStack(alignment: .leading) {
                                 Text(pos.symbol)
                                     .font(.system(size: 12, weight: .bold))
                                 Text(pos.direction.rawValue)
@@ -181,7 +181,7 @@ struct BrokerSection: View {
                             
                             Spacer()
                             
-                            VStack(align: .trailing) {
+                            VStack(alignment: .trailing) {
                                 Text("$\(String(format: "%.2f", pos.pnl))")
                                     .font(.system(size: 12, weight: .black, design: .monospaced))
                                     .foregroundColor(pos.pnl >= 0 ? .green : .red)

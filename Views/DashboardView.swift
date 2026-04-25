@@ -138,14 +138,9 @@ struct DashboardView: View {
                         .padding(.horizontal, 40)
                         .padding(.bottom, 40)
                         .disabled(vm.isScanning)
-                    }
                 }
             }
             .navigationBarHidden(true)
-                    }
-                    .padding()
-                }
-            }
             .navigationTitle("💎 Jewel Elite")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -163,7 +158,6 @@ struct DashboardView: View {
                     }
                 }
             }
-            // AI Analyst Breakdown removed for Technical Mode
         }
     }
 }
