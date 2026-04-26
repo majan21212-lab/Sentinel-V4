@@ -5,8 +5,8 @@ import '../models/trade_models.dart';
 
 class ApiService {
   // Configured for Jewel Elite Global VPS Connectivity
-  static const String baseUrl = "http://94.176.26.147:8000";
-  static const String wsUrl = "ws://94.176.26.147:8000/ws";
+  static const String baseUrl = "http://34.26.143.224:8000";
+  static const String wsUrl = "ws://34.26.143.224:8000/ws";
 
   /// Connects to the real-time websocket stream
   Stream<dynamic> get marketStream {
