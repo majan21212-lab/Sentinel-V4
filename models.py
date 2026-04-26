@@ -32,6 +32,15 @@ class Signal(BaseModel):
     class Config:
         populate_by_name = True
 
+class WebhookSignal(BaseModel):
+    id: str
+    action: str  # buy, sell, partial_exit, final_exit, breakeven
+    ticker: str
+    price: float
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+
 class RiskConfig(BaseModel):
     active_profile: RiskProfile = RiskProfile.CONSERVATIVE
     execution_mode: ExecutionMode = ExecutionMode.DEMO

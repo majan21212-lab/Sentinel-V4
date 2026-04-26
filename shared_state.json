@@ -1,7 +1,19 @@
 {
     "prices": {},
     "status": "INITIALIZING",
-    "signals": [],
+    "signals": [
+        {
+            "id": 8888,
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 2350.5,
+            "tp": 2380.0,
+            "sl": 2335.0,
+            "timeframe": "M15",
+            "pattern": "Institutional Liquidity Sweep (G.A.B v1.0)",
+            "created_at": "05:08:53"
+        }
+    ],
     "auto_trade": false,
     "demo_mode": true,
     "active_profile": "CONSERVATIVE",

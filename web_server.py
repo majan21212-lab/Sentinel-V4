@@ -202,35 +202,43 @@ async def connect_broker(request: Request):
 
 @app.post("/api/webhook/tradingview")
 async def tradingview_webhook(request: Request):
-    """Entry point for TradingView Alert signals."""
+    """Entry point for Sovereign Institutional signals."""
     try:
         data = await request.json()
-        logger.info(f"Received TradingView Webhook: {data}")
+        logger.info(f"🏛️ RECEIVED SOVEREIGN WEBHOOK: {data}")
         
-        # 1. Map to standardized Signal
-        from core.signals import Signal
-        signal = {
+        # 1. Identify Action
+        action = data.get("action", "buy").lower()
+        symbol = data.get("ticker", "UNKNOWN")
+        
+        # 2. Map to standardized Signal for Dashboard visibility
+        signal_summary = {
             "id": random.randint(1000, 9999),
-            "symbol": data.get("symbol", "UNKNOWN"),
-            "direction": data.get("action", "LONG").upper(),
+            "symbol": symbol,
+            "direction": "LONG" if action == "buy" else "SHORT" if action == "sell" else action.upper(),
             "entry": float(data.get("price", 0)),
             "tp": float(data.get("tp", 0)),
             "sl": float(data.get("sl", 0)),
-            "pattern": "TradingView External Alert",
+            "pattern": f"Sovereign {action.capitalize()}",
             "created_at": datetime.now().strftime("%H:%M:%S")
         }
         
-        # 2. Inject into shared state for dashboard visibility
-        SHARED_DATA["signals"] = [signal] + SHARED_DATA.get("signals", [])
+        # 3. Inject into shared state for dashboard visibility
+        SHARED_DATA["signals"] = [signal_summary] + SHARED_DATA.get("signals", [])
+        # Keep only the last 15 signals
+        SHARED_DATA["signals"] = SHARED_DATA["signals"][:15]
         
-        # 3. Trigger execution gateway if bot is active
+        # 4. Trigger execution gateway if bot is active
+        res = {"status": "accepted", "message": "Signal received"}
         if SHARED_DATA.get("is_bot_active"):
-            # logic to dispatch to gateway
-            pass
+            executor = state.get_executor()
+            # Run execution in a separate thread/task if it's blocking
+            res = executor.handle_webhook_action(data)
+            logger.info(f"🚀 Execution Result: {res}")
 
-        return JSONResponse(content={"status": "accepted", "signal_id": signal["id"]})
+        return JSONResponse(content={"status": "success", "signal_id": signal_summary["id"], "execution": res})
     except Exception as e:
-        logger.error(f"Webhook Error: {e}")
+        logger.error(f"❌ Webhook Error: {e}")
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
 
 def run_server(host="0.0.0.0", port=8000):
