@@ -73,7 +73,7 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     # ML Validation
     ml = get_ml_validator()
     confidence = ml.predict_confidence(raw_signal)
-    if confidence < 0.65:
+    if confidence < 0.45:
         log.warning("🛑 💎 ML Check Failed for %s (Confidence: %.1f%%) - Trade Ignored", symbol, confidence * 100)
         return
 
@@ -130,8 +130,8 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     state.SHARED_DATA["signals"] = state.SHARED_DATA["signals"][:10]
 
     # 3. Automated Execution
-    if not state.SHARED_DATA.get("auto_trade", False):
-        log.info("--- Auto-Trade is OFF. Skipping execution for %s ---", symbol)
+    if not state.SHARED_DATA.get("is_bot_active", False):
+        log.info("--- Core Engine is OFF. Skipping execution for %s ---", symbol)
         return
 
     # FIX #1 – Convert the plain dict from PatternsEngine into the Signal
@@ -157,6 +157,23 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     res = get_executor().place_trade(signal, platform=BROKER_TYPE)
     if res and res.get("status") == "success":
         log.info("✅ Trade Executed Successfully on %s", BROKER_TYPE)
+        
+        # Record trade for dashboard visibility
+        trade_record = {
+            "symbol": signal.symbol,
+            "direction": signal.direction,
+            "entry": signal.entry,
+            "tp": signal.tp1,
+            "sl": signal.sl,
+            "qty": getattr(signal, 'qty', 0.1),
+            "pnl": 0.0,
+            "status": "ACTIVE",
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        active_trades = state.SHARED_DATA.get("active_trades", [])
+        active_trades.insert(0, trade_record)
+        state.SHARED_DATA["active_trades"] = active_trades[:20] # Keep last 20
+        state.save_shared_state(state.SHARED_DATA)
     else:
         msg = res.get("message", "Unknown Error") if res else "No response"
         log.error("❌ Execution Failed on %s: %s", BROKER_TYPE, msg)
@@ -195,8 +212,8 @@ def run_god_mode(symbol: str, df=None) -> None:
     save_signal(raw_signal)
 
     # 4. Automated Execution
-    if not state.SHARED_DATA.get("auto_trade", False):
-        log.info("--- Auto-Trade is OFF. Skipping execution for %s ---", symbol)
+    if not state.SHARED_DATA.get("is_bot_active", False):
+        log.info("--- Core Engine is OFF. Skipping execution for %s ---", symbol)
         return
 
     # Convert to Signal Pydantic Model
@@ -218,10 +235,84 @@ def run_god_mode(symbol: str, df=None) -> None:
     res = get_executor().place_trade(signal, platform=BROKER_TYPE)
     if res and res.get("status") == "success":
         log.info("✅ God-Mode Trade Executed Successfully on %s", BROKER_TYPE)
+        
+        # Record trade for dashboard visibility
+        trade_record = {
+            "symbol": signal.symbol,
+            "direction": signal.direction,
+            "entry": signal.entry,
+            "tp": signal.tp1,
+            "sl": signal.sl,
+            "qty": getattr(signal, 'qty', 0.1),
+            "pnl": 0.0,
+            "status": "ACTIVE",
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        active_trades = state.SHARED_DATA.get("active_trades", [])
+        active_trades.insert(0, trade_record)
+        state.SHARED_DATA["active_trades"] = active_trades[:20]
+        state.save_shared_state(state.SHARED_DATA)
     else:
         msg = res.get("message", "Unknown Error") if res else "No response"
         log.error("❌ God-Mode Execution Failed: %s", msg)
 
+
+def update_pnl():
+    """Update floating PnL and close trades that hit TP/SL."""
+    active_trades = state.SHARED_DATA.get("active_trades", [])
+    if not active_trades:
+        return
+        
+    history = state.SHARED_DATA.get("trade_history", [])
+    prices = state.SHARED_DATA.get("prices", {})
+    
+    still_active = []
+    
+    for trade in active_trades:
+        sym = trade.get("symbol")
+        current_price = prices.get(sym)
+        if not current_price:
+            still_active.append(trade)
+            continue
+            
+        entry = trade["entry"]
+        is_long = trade["direction"] == "LONG"
+        qty = trade.get("qty", 0.1)
+        
+        if is_long:
+            diff = current_price - entry
+        else:
+            diff = entry - current_price
+            
+        # PnL multiplier heuristic
+        if "USD" in sym and "BTC" not in sym and "ETH" not in sym and "XAU" not in sym and "XAG" not in sym:
+            pnl = diff * 100000 * qty
+        elif "XAU" in sym:
+            pnl = diff * 100 * qty
+        elif "BTC" in sym or "ETH" in sym:
+            pnl = diff * qty
+        else:
+            pnl = diff * 100 * qty
+            
+        trade["pnl"] = round(pnl, 2)
+        
+        # Check TP/SL hit
+        if is_long:
+            if current_price >= trade["tp"] or current_price <= trade["sl"]:
+                trade["status"] = "CLOSED"
+                history.insert(0, trade)
+                continue
+        else:
+            if current_price <= trade["tp"] or current_price >= trade["sl"]:
+                trade["status"] = "CLOSED"
+                history.insert(0, trade)
+                continue
+                
+        still_active.append(trade)
+        
+    state.SHARED_DATA["active_trades"] = still_active
+    state.SHARED_DATA["trade_history"] = history[:50]
+    state.save_shared_state(state.SHARED_DATA)
 
 async def process_candle(symbol: str, df) -> None:
     """Callback for new candle data from FeedHandler."""
@@ -230,6 +321,7 @@ async def process_candle(symbol: str, df) -> None:
     if not m5_df.empty:
         state.SHARED_DATA["prices"][symbol] = float(m5_df['close'].iloc[-1])
         state.SHARED_DATA["status"] = "ONLINE"
+        update_pnl()
 
     # Strategy Execution
     if STRATEGY_MODE == "JEWEL_ELITE":
@@ -261,7 +353,12 @@ async def mt5_polling_loop(symbols: list, timeframe_str: str = "5m") -> None:
     log.info("💎 Starting MT5 Polling (MTF: M5, M15, H1) for %s", symbols)
     
     while True:
-        for symbol in symbols:
+        # Dynamically read active markets from shared state
+        current_symbols = state.SHARED_DATA.get("active_markets", symbols)
+        if not current_symbols:
+            current_symbols = symbols
+            
+        for symbol in current_symbols:
             try:
                 # Concurrent MTF fetching
                 tasks = [
@@ -297,6 +394,27 @@ def run_scheduler():
         import time
         time.sleep(60)
 
+
+async def pnl_update_loop():
+    """Rapid loop to fetch current ticks for active trades to make PnL dynamic."""
+    executor = get_executor()
+    adapter = executor.adapters.get("mt5")
+    if not adapter: return
+    
+    while True:
+        try:
+            active_trades = state.SHARED_DATA.get("active_trades", [])
+            if active_trades:
+                for trade in active_trades:
+                    sym = trade["symbol"]
+                    tick = mt5.symbol_info_tick(sym)
+                    if tick:
+                        # Use average of bid and ask for PnL calculation
+                        state.SHARED_DATA["prices"][sym] = (tick.bid + tick.ask) / 2
+                update_pnl()
+        except Exception as e:
+            log.error("PnL Update Error: %s", e)
+        await asyncio.sleep(2)
 
 async def main_loop() -> None:
     log.info("========================================")
@@ -334,6 +452,7 @@ async def main_loop() -> None:
         # Multi-Broker Fix: Use MT5 Polling for MT5-specific accounts
         try:
             state.SHARED_DATA["status"] = "ONLINE"
+            asyncio.create_task(pnl_update_loop())
             await mt5_polling_loop(symbols, timeframe_str="5m")
         except KeyboardInterrupt:
             log.info("Shutting down...")

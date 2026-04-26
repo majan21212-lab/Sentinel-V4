@@ -1,5 +1,5 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import json
@@ -66,9 +66,11 @@ if os.path.exists(get_resource_path("web")):
 
 @app.get("/")
 async def get_index():
-    index_path = get_resource_path("web/index.html")
-    with open(index_path, "r", encoding="utf-8") as f:
-        return HTMLResponse(content=f.read())
+    response = FileResponse(get_resource_path("web/index.html"))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.get("/api/status")
 async def get_status():
@@ -93,18 +95,30 @@ async def update_settings(request: Request):
     data = await request.json()
     logger.info(f"Updating Settings: {data}")
     
-    if "is_bot_active" in data: SHARED_DATA["is_bot_active"] = bool(data["is_bot_active"])
-    if "demo_mode" in data: SHARED_DATA["demo_mode"] = bool(data["demo_mode"])
-    if "active_broker" in data: SHARED_DATA["active_broker"] = data["active_broker"]
-    if "strategy_mode" in data: SHARED_DATA["strategy_mode"] = data["strategy_mode"]
+    if "is_bot_active" in data: state.SHARED_DATA["is_bot_active"] = bool(data["is_bot_active"])
+    if "demo_mode" in data: state.SHARED_DATA["demo_mode"] = bool(data["demo_mode"])
+    if "active_broker" in data: state.SHARED_DATA["active_broker"] = data["active_broker"]
+    if "strategy_mode" in data: state.SHARED_DATA["strategy_mode"] = data["strategy_mode"]
     
     if "active_markets" in data:
-        SHARED_DATA["active_markets"] = data["active_markets"]
+        state.SHARED_DATA["active_markets"] = data["active_markets"]
         
-    if "demo_deposit" in data:
+    if "fund_action" in data:
+        action = data["fund_action"]
         try:
-            amt = float(data["demo_deposit"])
-            SHARED_DATA["demo_balance"] = SHARED_DATA.get("demo_balance", 200.00) + amt
+            amt = float(data.get("amount", 0))
+            is_demo = state.SHARED_DATA.get("active_broker", "DEMO") == "DEMO"
+            bal_key = "demo_balance" if is_demo else "balance"
+            
+            current_bal = state.SHARED_DATA.get(bal_key, 0.0)
+            
+            if action == "deposit":
+                state.SHARED_DATA[bal_key] = current_bal + amt
+            elif action == "withdraw":
+                state.SHARED_DATA[bal_key] = max(0.0, current_bal - amt)
+            elif action == "reset":
+                state.SHARED_DATA[bal_key] = 0.0
+                
         except ValueError:
             pass
     
@@ -122,12 +136,12 @@ async def update_settings(request: Request):
     executor = state.get_executor()
     if executor:
         from models import ExecutionMode
-        executor.risk_engine.config.execution_mode = ExecutionMode.DEMO if SHARED_DATA["demo_mode"] else ExecutionMode.LIVE
-        SHARED_DATA["risk_config"] = executor.risk_engine.config.dict()
+        executor.risk_engine.config.execution_mode = ExecutionMode.DEMO if state.SHARED_DATA["demo_mode"] else ExecutionMode.LIVE
+        state.SHARED_DATA["risk_config"] = executor.risk_engine.config.dict()
     
-    state.save_shared_state(SHARED_DATA)
-    logger.info(f"Saving State... is_bot_active={SHARED_DATA.get('is_bot_active')}")
-    return JSONResponse(content={"status": "success", "config": SHARED_DATA.get("risk_config", {})})
+    state.save_shared_state(state.SHARED_DATA)
+    logger.info(f"Saving State... is_bot_active={state.SHARED_DATA.get('is_bot_active')}")
+    return JSONResponse(content={"status": "success", "config": state.SHARED_DATA.get("risk_config", {})})
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -143,13 +157,14 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.remove(websocket)
 
 async def broadcast_data():
-    global SHARED_DATA
     while True:
         try:
-            # Sync from disk since core bot is in a different process
-            SHARED_DATA = state.load_shared_state()
+            # Sync from disk and update the in-memory state dictionary
+            saved_state = state.load_shared_state()
+            state.SHARED_DATA.update(saved_state)
+            
             if active_connections:
-                payload = json.dumps(SHARED_DATA)
+                payload = json.dumps(state.SHARED_DATA)
                 disconnected = set()
                 for ws in active_connections:
                     try:

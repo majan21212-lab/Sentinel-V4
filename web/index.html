@@ -2,171 +2,241 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jewel Elite | Institutional Execution</title>
-    <link rel="stylesheet" href="static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jewel Elite | Bot Manager</title>
+    <link rel="stylesheet" href="static/style.css?v=7.0.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <header>
-        <div class="logo-container">
-            <img src="static/assets/gab_logo.png" alt="G.A.B Logo" style="height: 40px; width: 40px;">
-            <h1>JEWEL <span style="font-weight: 300; opacity: 0.5;">ELITE</span></h1>
-        </div>
-
-        <div class="header-center">
-            <button id="master-activation-btn" class="activate-btn" onclick="toggleBot()">
-                <span id="activation-text">INVOKE CORE ENGINE</span>
-            </button>
-        </div>
-
-        <div class="status-indicator">
-            <div class="card glass balance-card">
-                <div id="balance-display">$3,968.82</div>
-                <div id="equity-display" class="free-margin">Free margin: $3,940.08</div>
-                <div id="demo-deposit-container" style="display: none; margin-top: 10px; justify-content: space-between; gap: 10px;">
-                    <input type="number" id="deposit-amount" placeholder="Amount ($)" class="config-input" style="width: 60%; padding: 4px;">
-                    <button onclick="depositFunds()" class="activate-btn" style="flex: 1; padding: 4px; font-size: 0.8rem;">Deposit</button>
-                </div>
+    <div class="app-layout">
+        
+        <!-- SIDEBAR -->
+        <nav class="sidebar">
+            <div class="brand">
+                <div class="brand-title">JEWEL ELITE</div>
+                <div class="brand-sub">AUTOMATED BOT MANAGER</div>
             </div>
-        </div>
-    </header>
+            <ul class="nav-links">
+                <li class="nav-item active" onclick="switchTab('dashboard', this)">📊 Dashboard</li>
+                <li class="nav-item" onclick="switchTab('bots', this)">🤖 My Bots</li>
+                <li class="nav-item" onclick="switchTab('portfolio', this)">💼 Portfolio</li>
+                <li class="nav-item" onclick="switchTab('settings', this)">⚙️ Settings</li>
+            </ul>
+        </nav>
 
-    <main class="dashboard-grid">
-        <section class="main-column">
-            <!-- Professional TradingView Chart -->
-            <div class="card glass chart-container" style="padding: 0; overflow: hidden; height: 450px;">
-                <div class="tradingview-widget-container" style="height:100%;width:100%">
-                    <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
-                    <script src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js">
-                    {
-                        "autosize": true,
-                        "symbol": "OANDA:XAUUSD",
-                        "interval": "15",
-                        "timezone": "Etc/UTC",
-                        "theme": "dark",
-                        "style": "1",
-                        "locale": "en",
-                        "enable_publishing": false,
-                        "allow_symbol_change": true,
-                        "calendar": false,
-                        "support_host": "https://www.tradingview.com"
-                    }
-                    </script>
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            
+            <!-- HEADER ROW (Always Visible) -->
+            <header class="header-row">
+                <div>
+                    <h2 style="font-size: 1.2rem; font-weight: 800;" id="page-title">Dashboard Overview</h2>
+                    <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Monitor your algorithmic trading performance.</p>
                 </div>
-            </div>
+                <div class="master-switch">
+                    <div style="display: flex; gap: 5px; align-items: center; margin-right: 15px;">
+                        <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-neon); box-shadow: 0 0 8px var(--accent-neon);"></div>
+                        <span style="font-size: 0.75rem; color: var(--accent-neon); font-weight: 800;" id="header-broker-status">DEMO ONLINE</span>
+                    </div>
+                    <button id="master-activation-btn" class="activate-btn" onclick="toggleBot()">
+                        <span id="activation-text">START BOT ENGINE</span>
+                    </button>
+                </div>
+            </header>
 
-            <!-- Professional Terminal -->
-            <div class="card glass terminal-container">
-                <div class="terminal-header">
-                    <div class="card-title">Institutional Terminal</div>
-                    <div class="terminal-tabs">
-                        <button class="tab-btn active" onclick="setTerminalTab('active')">Open</button>
-                        <button class="tab-btn" onclick="setTerminalTab('pending')">Pending</button>
-                        <button class="tab-btn" onclick="setTerminalTab('history')">Closed</button>
+            <!-- ============================== -->
+            <!-- TAB: DASHBOARD -->
+            <!-- ============================== -->
+            <div id="tab-dashboard" class="tab-pane active">
+                <!-- KPI GRID -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <span class="kpi-label">TOTAL BALANCE</span>
+                        <span class="kpi-value" id="balance-display">$0.00</span>
+                        <span class="kpi-sub text-green" id="daily-pnl-display">+0.00% Today</span>
+                    </div>
+                    <div class="kpi-card" style="--accent-primary: var(--accent-neon);">
+                        <span class="kpi-label">AI WIN RATE (30D)</span>
+                        <span class="kpi-value text-green" id="win-rate-display">0.0%</span>
+                        <span class="kpi-sub" style="color: var(--text-muted);" id="signals-count-display">0 Total Signals</span>
+                    </div>
+                    <div class="kpi-card" style="--accent-primary: var(--danger);">
+                        <span class="kpi-label">DAILY DRAWDOWN</span>
+                        <span class="kpi-value text-red" id="drawdown-display">0.0%</span>
+                        <span class="kpi-sub" style="color: var(--text-muted);">Max Allowed: 5.0%</span>
+                    </div>
+                    <div class="kpi-card" style="--accent-primary: var(--warning);">
+                        <span class="kpi-label">ACTIVE STRATEGY</span>
+                        <span class="kpi-value" style="color: var(--warning);">Pattern Flow</span>
+                        <span class="kpi-sub" style="color: var(--text-muted);" id="exposure-display">Exposure: 12.5%</span>
                     </div>
                 </div>
-                <div class="terminal-content">
-                    <table class="terminal-table" id="terminal-table">
+
+                <!-- CHARTS GRID -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="card-title">PERFORMANCE EQUITY CURVE</div>
+                        <div class="chart-container"><canvas id="equityChart"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="card-title">CURRENT ASSET EXPOSURE</div>
+                        <div class="chart-container"><canvas id="allocationChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- BOTTOM GRID -->
+                <div class="bottom-grid">
+                    <div class="table-card">
+                        <div class="card-title">RECENT BOT ACTIVITY LOG</div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>TIME</th>
+                                    <th>SYMBOL</th>
+                                    <th>DIR</th>
+                                    <th>ENTRY</th>
+                                    <th>TARGETS (TP/SL)</th>
+                                    <th>PNL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="terminal-body">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="signals-card">
+                        <div class="card-title">AI SIGNAL DETECTIONS</div>
+                        <div id="signal-list" class="signal-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================== -->
+            <!-- TAB: MY BOTS -->
+            <!-- ============================== -->
+            <div id="tab-bots" class="tab-pane">
+                <div class="kpi-grid" id="bots-list">
+                    <!-- Dummy bots for UI visualization -->
+                    <div class="kpi-card">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div>
+                                <span class="kpi-label">Smart Pattern Flow</span>
+                                <span class="kpi-value" style="font-size: 1.4rem;">ACTIVE</span>
+                            </div>
+                            <div style="width: 12px; height: 12px; background: var(--accent-neon); border-radius: 50%;"></div>
+                        </div>
+                        <div style="margin-top: 15px; display:flex; gap: 10px;">
+                            <span class="kpi-sub text-green">Win Rate: 85%</span>
+                            <span class="kpi-sub" style="color: var(--text-muted);">Pairs: XAU, BTC</span>
+                        </div>
+                        <button class="btn-secondary" style="margin-top: 15px;" onclick="configureBot('Smart Pattern Flow')">Configure Bot</button>
+                    </div>
+
+                    <div class="kpi-card" style="--accent-primary: var(--text-muted);">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div>
+                                <span class="kpi-label">Grid DCA Scalper</span>
+                                <span class="kpi-value" style="font-size: 1.4rem; color: var(--text-muted);">STOPPED</span>
+                            </div>
+                            <div style="width: 12px; height: 12px; background: var(--text-muted); border-radius: 50%;"></div>
+                        </div>
+                        <div style="margin-top: 15px; display:flex; gap: 10px;">
+                            <span class="kpi-sub text-green">Win Rate: 92%</span>
+                            <span class="kpi-sub" style="color: var(--text-muted);">Pairs: ETH, SOL</span>
+                        </div>
+                        <button class="btn-secondary" style="margin-top: 15px;" onclick="toggleDummyBot(this, 'Grid DCA Scalper')">Start Bot</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================== -->
+            <!-- TAB: PORTFOLIO -->
+            <!-- ============================== -->
+            <div id="tab-portfolio" class="tab-pane">
+                <div class="table-card">
+                    <div class="card-title">OPEN POSITIONS</div>
+                    <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Symbol</th>
-                                <th>Type</th>
-                                <th>Entry</th>
-                                <th>TP/SL</th>
-                                <th>PnL</th>
-                                <th>Status</th>
+                                <th>ASSET</th>
+                                <th>POSITION SIZE</th>
+                                <th>CURRENT PRICE</th>
+                                <th>AVERAGE ENTRY</th>
+                                <th>UNREALIZED PNL</th>
                             </tr>
                         </thead>
-                        <tbody id="terminal-body">
+                        <tbody id="portfolio-body">
                             <!-- Populated by JS -->
                         </tbody>
                     </table>
                 </div>
             </div>
-        </section>
 
-        <aside class="side-column">
-            <div class="card glass">
-                <div class="card-title">Performance Heatmap</div>
-                <div id="heatmap-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 10px;">
-                    <!-- 28 days of performance simulated -->
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.8; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.4; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--danger); opacity: 0.5; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.9; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.6; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 1; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.3; height: 12px; border: none;"></div>
-                    <!-- Repeat for more rows -->
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.5; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.7; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--danger); opacity: 0.8; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.4; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.8; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.2; height: 12px; border: none;"></div>
-                    <div class="chip" style="background: var(--accent-neon); opacity: 0.9; height: 12px; border: none;"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-secondary); margin-top: 10px;">
-                    <span>Last 28 Days</span>
-                    <span>94% Accuracy</span>
+            <!-- ============================== -->
+            <!-- TAB: SETTINGS -->
+            <!-- ============================== -->
+            <div id="tab-settings" class="tab-pane">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <!-- Broker Settings -->
+                    <div class="table-card">
+                        <div class="card-title">BROKER CONNECTIVITY</div>
+                        <div class="form-group">
+                            <label class="kpi-label">SELECT EXCHANGE / BROKER</label>
+                            <select class="custom-select" id="active-broker-select">
+                                <option value="DEMO">Demo Simulator</option>
+                                <option value="MT5">MetaTrader 5</option>
+                                <option value="BINANCE">Binance API</option>
+                            </select>
+                        </div>
+                        
+                        <div id="account-funding-container" class="form-group" style="padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                            <label class="kpi-label" style="color: var(--accent-primary);">ACCOUNT FUNDING (LIVE / DEMO)</label>
+                            <div style="display:flex; gap:10px; margin-top: 10px;">
+                                <input type="number" id="funding-amount" placeholder="Amount ($)" class="custom-input" style="margin-top:0;">
+                            </div>
+                            <div style="display:flex; gap:10px; margin-top: 10px;">
+                                <button onclick="manageFunds('deposit')" class="btn-secondary" style="flex: 1; border-color: var(--accent-neon); color: var(--accent-neon);">Deposit</button>
+                                <button onclick="manageFunds('withdraw')" class="btn-secondary" style="flex: 1; border-color: var(--warning); color: var(--warning);">Withdraw</button>
+                                <button onclick="manageFunds('reset')" class="btn-secondary" style="flex: 1; border-color: var(--danger); color: var(--danger);">Reset to Zero</button>
+                            </div>
+                        </div>
+
+                        <div id="broker-credentials" class="form-group" style="display: none;">
+                            <label class="kpi-label">API CREDENTIALS</label>
+                            <input type="password" id="api-key-input" placeholder="API Key" class="custom-input">
+                            <input type="password" id="api-secret-input" placeholder="API Secret" class="custom-input">
+                            <button class="btn-secondary" style="margin-top: 15px; width: 100%;" onclick="linkWallet()">Link Wallet</button>
+                        </div>
+                    </div>
+
+                    <!-- Risk Settings -->
+                    <div class="table-card">
+                        <div class="card-title">RISK MANAGEMENT</div>
+                        <div class="form-group">
+                            <label class="kpi-label">MAX DAILY DRAWDOWN (%)</label>
+                            <input type="number" value="5.0" class="custom-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="kpi-label">RISK PER TRADE (%)</label>
+                            <input type="number" value="1.0" class="custom-input">
+                        </div>
+                        <button class="btn-secondary" style="margin-top: 10px;" onclick="saveRiskParams()">Save Risk Parameters</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="card glass">
-                <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Detection Feed</span>
-                    <select id="signal-filter" onchange="renderSignals(lastSignalArray)" style="background: rgba(0,0,0,0.5); color: white; border: 1px solid var(--accent-neon); border-radius: 4px; padding: 2px; font-size: 0.7rem;">
-                        <option value="ALL">All Signals</option>
-                        <option value="LONG">Buy (Long)</option>
-                        <option value="SHORT">Sell (Short)</option>
-                    </select>
-                </div>
-                <div class="signal-feed" id="signal-list">
-                    <!-- Populated by JS -->
-                </div>
-            </div>
+        </main>
+    </div>
 
-            <div class="card glass">
-                <div class="card-title">Active Markets</div>
-                <div id="market-checkboxes" style="margin-top: 10px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px;">
-                    <!-- Populated by JS -->
-                </div>
-                <button class="activate-btn" onclick="saveMarkets()" style="margin-top: 10px; width: 100%; font-size: 0.8rem; padding: 8px;">Apply Markets</button>
-            </div>
+    <!-- Hidden element for compatibility with app.js checks -->
+    <div id="equity-display" style="display: none;"></div>
+    
+    <!-- Toast Notification -->
+    <div id="toast">Notification</div>
 
-            <div class="card glass">
-                <div class="card-title">Broker Connectivity</div>
-                <div class="control-group" style="margin-top: 10px;">
-                    <label>Active Platform</label>
-                    <select class="config-select" id="active-broker-select" style="width: 100%; margin-top: 8px; border-color: var(--accent-neon);">
-                        <option value="DEMO">Demo Simulation</option>
-                        <option value="MT5">MetaTrader 5 (Exness/XTB)</option>
-                        <option value="BINANCE">Binance Global</option>
-                        <option value="OKX">OKX Institutional</option>
-                    </select>
-                </div>
-                <div id="broker-credentials" style="display: none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-                    <input type="password" id="api-key-input" placeholder="API Key" class="config-input" style="width: 100%; margin-bottom: 8px;">
-                    <input type="password" id="api-secret-input" placeholder="API Secret" class="config-input" style="width: 100%; margin-bottom: 8px;">
-                    <button class="activate-btn" onclick="saveCredentials()" style="width: 100%; font-size: 0.8rem; padding: 8px;">Link Wallet</button>
-                </div>
-            </div>
-
-            <div class="card glass">
-                <div class="card-title">Bot Configuration</div>
-                <div class="control-group">
-                    <label>Strategy Mode</label>
-                    <select class="config-select" id="strategy-mode-select" onchange="updateConfig('strategy_mode', this.value)" style="width: 100%; margin-top: 8px;">
-                        <option value="PATTERN">Institutional Pattern</option>
-                        <option value="GRID">High-Freq Grid</option>
-                        <option value="DCA">DCA (Martingale Hybrid)</option>
-                    </select>
-                </div>
-            </div>
-        </aside>
-    </main>
-
-    <script src="static/app.js?v=1.0.5"></script>
+    <script src="static/app.js?v=7.0.0"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import pandas_ta as ta
 import logging
 
 log = logging.getLogger(__name__)
