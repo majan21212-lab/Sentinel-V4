@@ -10,6 +10,8 @@ class FastAPIService: ObservableObject {
     
     @Published var latestSignals: [TradeSignal] = []
     @Published var connectionStatus: String = "Disconnected"
+    @Published var balance: Double = 0.0
+    @Published var activeBroker: String = "DEMO"
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -151,23 +153,31 @@ class FastAPIService: ObservableObject {
         guard let data = text.data(using: .utf8) else { return }
         
         // The backend broadcasts SHARED_DATA which contains "signals"
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let signalsArray = json["signals"] as? [[String: Any]] {
-            
-            // Map raw JSON to TradeSignal
-            let decoder = JSONDecoder()
-            // We might need a custom Date formatter depending on Python's output
-            // For now, assume ISO or standard string
-            
-            if let signalsData = try? JSONSerialization.data(withJSONObject: signalsArray),
-               var decodedSignals = try? decoder.decode([TradeSignal].self, from: signalsData) {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            DispatchQueue.main.async {
+                if let demoBal = json["demo_balance"] as? Double, self.activeBroker == "DEMO" {
+                    self.balance = demoBal
+                } else if let liveBal = json["balance"] as? Double {
+                    self.balance = liveBal
+                }
                 
-                DispatchQueue.main.async {
-                    // Mark as backend validated
-                    for i in 0..<decodedSignals.count {
-                        decodedSignals[i].isBackendValidated = true
+                if let broker = json["active_broker"] as? String {
+                    self.activeBroker = broker
+                }
+            }
+
+            if let signalsArray = json["signals"] as? [[String: Any]] {
+                // Map raw JSON to TradeSignal
+                let decoder = JSONDecoder()
+                if let signalsData = try? JSONSerialization.data(withJSONObject: signalsArray),
+                   var decodedSignals = try? decoder.decode([TradeSignal].self, from: signalsData) {
+                    
+                    DispatchQueue.main.async {
+                        for i in 0..<decodedSignals.count {
+                            decodedSignals[i].isBackendValidated = true
+                        }
+                        self.latestSignals = decodedSignals
                     }
-                    self.latestSignals = decodedSignals
                 }
             }
         }

@@ -61,7 +61,7 @@ struct DashboardView: View {
                         
                         // 2. KPI Grid (4 Cards)
                         LazyVGrid(columns: columns, spacing: 15) {
-                            KPICard(title: "TOTAL BALANCE", value: "$\(vm.price)", subText: "+0.00% Today", color: .green)
+                            KPICard(title: "TOTAL BALANCE", value: vm.balance, subText: "+0.00% Today", color: .green)
                             KPICard(title: "AI WIN RATE", value: "85.4%", subText: "30D Avg", color: .green)
                             KPICard(title: "DAILY DRAWDOWN", value: "0.0%", subText: "Max Allowed: 5.0%", color: .red)
                             KPICard(title: "ACTIVE STRATEGY", value: "Pattern", subText: "Exposure: 12%", color: Theme.primaryPurple)
