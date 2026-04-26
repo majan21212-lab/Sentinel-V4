@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 class MarketViewModel: ObservableObject {
-    @Published var price: String = "0.00"
+    @Published var balance: String = "$0.00"
     @Published var activeSignals: [TradeSignal] = []
     @Published var isScanning: Bool = false
     @Published var autoTrade: Bool = false
@@ -135,6 +135,13 @@ class MarketViewModel: ObservableObject {
                 for signal in signals {
                     self?.addSignalWithHaptics(signal)
                 }
+            }
+            .store(in: &cancellables)
+
+        fastAPI.$balance
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newBalance in
+                self?.balance = String(format: "$%.2f", newBalance)
             }
             .store(in: &cancellables)
     }
