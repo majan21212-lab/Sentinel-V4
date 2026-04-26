@@ -4,7 +4,7 @@ import Combine
 class FastAPIService: ObservableObject {
     static let shared = FastAPIService()
     
-    private let baseURL = "http://192.168.100.10:8000" // Default backend URL
+    private let baseURL = "http://34.26.143.224:8000" // Default backend URL
     private var webSocketTask: URLSessionWebSocketTask?
     private let token = KeychainManager.shared.load(for: "sentinel_api_token") ?? "sentinel_debug_key"
     
@@ -116,7 +116,7 @@ class FastAPIService: ObservableObject {
     // MARK: - WebSocket (Live Streams)
     
     func connectWebSocket() {
-        let wsURL = URL(string: "ws://localhost:8000/ws")!
+        let wsURL = URL(string: "ws://34.26.143.224:8000/ws")!
         webSocketTask = URLSession.shared.webSocketTask(with: wsURL)
         webSocketTask?.resume()
         
