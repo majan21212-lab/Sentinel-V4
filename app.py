@@ -284,15 +284,20 @@ def update_pnl():
         else:
             diff = entry - current_price
             
-        # PnL multiplier heuristic
-        if "USD" in sym and "BTC" not in sym and "ETH" not in sym and "XAU" not in sym and "XAG" not in sym:
-            pnl = diff * 100000 * qty
-        elif "XAU" in sym:
-            pnl = diff * 100 * qty
-        elif "BTC" in sym or "ETH" in sym:
+        # Accurate PnL calculation
+        if "BTC" in sym or "ETH" in sym:
+            # Crypto: Price diff * qty
             pnl = diff * qty
-        else:
+        elif "XAU" in sym or "GOLD" in sym:
+            # Gold: 1 Lot = 100 oz. Price diff * 100 * qty
             pnl = diff * 100 * qty
+        elif "XAG" in sym or "SILVER" in sym:
+            # Silver: 1 Lot = 5000 oz. Price diff * 5000 * qty
+            pnl = diff * 5000 * qty
+        else:
+            # Standard Forex: 1 Lot = 100,000 units
+            # PnL = (Price Diff) * 100,000 * qty (assuming USD is quote currency)
+            pnl = diff * 100000 * qty
             
         trade["pnl"] = round(pnl, 2)
         
@@ -334,14 +339,18 @@ async def process_candle(symbol: str, df) -> None:
 
 async def mt5_polling_loop(symbols: list, timeframe_str: str = "5m") -> None:
     """Fallback loop for MT5 data fetching when Binance feed is unavailable."""
-    executor = get_executor()
-    adapter = executor.adapters.get("mt5")
-    if not adapter:
-        log.error("❌ MT5 Adapter not available in ExecutionLayer. Polling aborted.")
-        return
+    while True:
+        executor = get_executor()
+        adapter = executor.adapters.get("mt5")
+        if not adapter:
+            log.warning("⚠️ MT5 Adapter not available. Is the terminal authorized? Retrying in 60s...")
+            # Attempt to re-initialize adapters
+            executor._init_adapters()
+            await asyncio.sleep(60)
+            continue
 
-    # Map timeframe string to MT5 constant
-    tf_map = {
+        # Map timeframe string to MT5 constant
+        tf_map = {
         "1m": mt5.TIMEFRAME_M1,
         "5m": mt5.TIMEFRAME_M5,
         "15m": mt5.TIMEFRAME_M15,

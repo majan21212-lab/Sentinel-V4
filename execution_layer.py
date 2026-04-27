@@ -226,7 +226,7 @@ class MT5Adapter(BaseExchangeAdapter):
     }
 
     def __init__(self):
-        if not mt5.initialize():
+        if not mt5.initialize(path="C:/Program Files/MetaTrader 5/terminal64.exe"):
             error = mt5.last_error()
             raise RuntimeError(f"MT5 initialisation failed: {error}")
 
@@ -300,8 +300,14 @@ class MT5Adapter(BaseExchangeAdapter):
                 log.info("MT5 order placed for target %s. Ticket=%s", target_price, result.order)
                 results.append({"status": "success", "exchange": "mt5", "ticket": result.order})
 
-        # Return the last result or a summary
-        return results[0] if len(results) == 1 else {"status": "success", "details": results}
+        # Return summary
+        success_count = sum(1 for r in results if r["status"] == "success")
+        if success_count == len(targets):
+            return {"status": "success", "exchange": "mt5", "details": results}
+        elif success_count > 0:
+            return {"status": "partial_success", "exchange": "mt5", "details": results}
+        else:
+            return {"status": "error", "exchange": "mt5", "message": results[0].get("message", "All orders failed"), "details": results}
 
     def get_balance(self) -> dict:
         info = mt5.account_info()
@@ -326,19 +332,33 @@ class MT5Adapter(BaseExchangeAdapter):
         
         df = pd.DataFrame(rates)
         df['timestamp'] = pd.to_datetime(df['time'], unit='s')
+        
         # Map MT5 specific columns to standard names
-        df.rename(columns={'tick_volume': 'volume'}, inplace=True)
+        if 'tick_volume' in df.columns:
+            df.rename(columns={'tick_volume': 'volume'}, inplace=True)
+        elif 'real_volume' in df.columns:
+            df.rename(columns={'real_volume': 'volume'}, inplace=True)
+        
+        if 'volume' not in df.columns:
+            df['volume'] = 1 # Fallback for TA that requires volume
+            
         return df
 
     def close_all_positions(self) -> dict:
         positions = mt5.positions_get()
-        if not positions:
-            return {"status": "success", "closed": 0}
+        log.warning("MT5: Panic Close All triggered. Attempting to liquidate %d positions.", len(positions))
         
+        detail_results = []
         count = 0
         for p in positions:
+            tick = mt5.symbol_info_tick(p.symbol)
+            if not tick:
+                log.error("MT5: Cannot close %s - no tick data", p.symbol)
+                detail_results.append({"ticket": p.ticket, "symbol": p.symbol, "status": "error", "message": "No tick data"})
+                continue
+                
             order_type = mt5.ORDER_TYPE_SELL if p.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
-            price = mt5.symbol_info_tick(p.symbol).bid if p.type == mt5.POSITION_TYPE_BUY else mt5.symbol_info_tick(p.symbol).ask
+            price = tick.bid if p.type == mt5.POSITION_TYPE_BUY else tick.ask
             
             request = {
                 "action":       mt5.TRADE_ACTION_DEAL,
@@ -356,9 +376,13 @@ class MT5Adapter(BaseExchangeAdapter):
             res = mt5.order_send(request)
             if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                 count += 1
+                detail_results.append({"ticket": p.ticket, "symbol": p.symbol, "status": "success"})
+            else:
+                msg = res.comment if res else "No response"
+                log.error("MT5: Failed to close %s (Ticket: %s): %s", p.symbol, p.ticket, msg)
+                detail_results.append({"ticket": p.ticket, "symbol": p.symbol, "status": "error", "message": msg})
         
-        log.warning("MT5: Panic Close All triggered. %d positions closed.", count)
-        return {"status": "success", "closed": count}
+        return {"status": "success" if count == len(positions) else "partial", "closed_count": count, "details": detail_results}
 
 
 # ── Execution Layer ───────────────────────────────────────────────────────────

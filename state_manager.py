@@ -3,11 +3,13 @@ import os
 import json
 from execution_layer import ExecutionLayer
 from ml_validator import MLValidator
+import threading
 
 log = logging.getLogger(__name__)
 
 # --- SHARED STATE PERSISTENCE ---
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shared_state.json")
+STATE_LOCK = threading.Lock()
 
 _LAST_VALID_STATE = None
 
@@ -25,6 +27,10 @@ def load_shared_state():
         "pending_orders": [],
         "trade_history": [],
         "active_markets": ["XAUUSDm", "BTCUSDm"],
+        "market_configs": {
+            "XAUUSDm": {"enabled": True, "strategy": "JEWEL_ELITE"},
+            "BTCUSDm": {"enabled": True, "strategy": "JEWEL_ELITE"}
+        },
         "is_bot_active": False,
         "kill_switch": False,
         "demo_balance": 200.00,
@@ -33,25 +39,27 @@ def load_shared_state():
         "analytics": {}
     }
     if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r") as f:
-                saved = json.load(f)
-                defaults.update(saved)
-                _LAST_VALID_STATE = defaults
-                return defaults
-        except Exception as e:
-            # log.warning(f"State: Error loading state: {e}") # Silenced to avoid spamming logs during normal file contention
-            if _LAST_VALID_STATE is not None:
-                return _LAST_VALID_STATE
+        with STATE_LOCK:
+            try:
+                with open(STATE_FILE, "r") as f:
+                    saved = json.load(f)
+                    defaults.update(saved)
+                    _LAST_VALID_STATE = defaults
+                    return defaults
+            except Exception as e:
+                # log.warning(f"State: Error loading state: {e}") # Silenced to avoid spamming logs during normal file contention
+                if _LAST_VALID_STATE is not None:
+                    return _LAST_VALID_STATE
             
     return defaults
 
 def save_shared_state(data):
-    try:
-        with open(STATE_FILE, "w") as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        log.error(f"State: Error saving state: {e}")
+    with STATE_LOCK:
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            log.error(f"State: Error saving state: {e}")
 
 SHARED_DATA = load_shared_state()
 

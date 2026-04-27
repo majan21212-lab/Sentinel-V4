@@ -56,10 +56,23 @@ def setup_database():
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
+            # Create Transactions Table (For Audit Trail)
+            create_transactions_query = """
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL, -- 'deposit', 'withdraw', 'reset'
+                amount REAL,
+                balance_before REAL,
+                balance_after REAL,
+                status TEXT DEFAULT 'success',
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
             cursor.execute(create_table_query)
             cursor.execute(create_history_query)
+            cursor.execute(create_transactions_query)
             conn.commit()
-            print("Table 'signals' check/creation successful using SQLite.")
+            print("Database tables check/creation successful using SQLite.")
             
             cursor.close()
             conn.close()
@@ -69,6 +82,23 @@ def setup_database():
 
     except sqlite3.Error as e:
         print(f"Error during SQLite database setup: {e}")
+
+def log_transaction(tx_type, amount, balance_before, balance_after, status='success'):
+    """Logs a funding transaction to the database."""
+    try:
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO transactions (type, amount, balance_before, balance_after, status)
+                VALUES (?, ?, ?, ?, ?)
+            """, (tx_type, amount, balance_before, balance_after, status))
+            conn.commit()
+            conn.close()
+            return True
+    except Exception as e:
+        print(f"Error logging transaction: {e}")
+    return False
 
 if __name__ == "__main__":
     setup_database()

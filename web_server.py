@@ -24,7 +24,8 @@ def get_resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
     except Exception:
-        base_path = os.path.abspath(".")
+        # Use the directory containing this script as the base path
+        base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
 active_connections = set()
@@ -61,12 +62,12 @@ async def get_analytics():
         return JSONResponse(content=df.set_index('pattern')['accuracy'].to_dict())
     except: return JSONResponse(content={})
 
-if os.path.exists(get_resource_path("web")):
-    app.mount("/static", StaticFiles(directory=get_resource_path("web")), name="static")
+if os.path.exists(get_resource_path("Elirox")):
+    app.mount("/static", StaticFiles(directory=get_resource_path("Elirox")), name="static")
 
 @app.get("/")
 async def get_index():
-    response = FileResponse(get_resource_path("web/index.html"))
+    response = FileResponse(get_resource_path("Elirox/index.html"))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -107,20 +108,33 @@ async def update_settings(request: Request):
         action = data["fund_action"]
         try:
             amt = float(data.get("amount", 0))
+            if amt <= 0 and action != "reset":
+                return JSONResponse(status_code=400, content={"status": "error", "message": "Amount must be positive"})
+                
             is_demo = state.SHARED_DATA.get("active_broker", "DEMO") == "DEMO"
             bal_key = "demo_balance" if is_demo else "balance"
-            
             current_bal = state.SHARED_DATA.get(bal_key, 0.0)
             
+            from db_utils import log_transaction
+            
             if action == "deposit":
-                state.SHARED_DATA[bal_key] = current_bal + amt
+                new_bal = current_bal + amt
+                state.SHARED_DATA[bal_key] = new_bal
+                log_transaction("deposit", amt, current_bal, new_bal)
             elif action == "withdraw":
-                state.SHARED_DATA[bal_key] = max(0.0, current_bal - amt)
+                if current_bal < amt:
+                    log_transaction("withdraw", amt, current_bal, current_bal, status='failed: insufficient funds')
+                    return JSONResponse(status_code=400, content={"status": "error", "message": "Insufficient funds for withdrawal"})
+                new_bal = current_bal - amt
+                state.SHARED_DATA[bal_key] = new_bal
+                log_transaction("withdraw", amt, current_bal, new_bal)
             elif action == "reset":
                 state.SHARED_DATA[bal_key] = 0.0
+                log_transaction("reset", current_bal, current_bal, 0.0)
                 
-        except ValueError:
-            pass
+        except Exception as e:
+            logger.error(f"Funding Error: {e}")
+            return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
     
     if "credentials" in data:
         creds = data["credentials"]
@@ -215,6 +229,39 @@ async def connect_broker(request: Request):
         logger.error(f"Connection Error: {e}")
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
 
+@app.post("/api/close_position")
+async def close_position(request: Request):
+    """Closes a specific active position."""
+    try:
+        data = await request.json()
+        symbol = data.get("symbol")
+        logger.info(f"🛑 Manual Close Requested for {symbol}")
+        
+        active_trades = SHARED_DATA.get("active_trades", [])
+        # In a real scenario, we'd send a close order to the broker
+        # For this demo/phase, we remove it from the active list
+        new_trades = [t for t in active_trades if t["symbol"] != symbol]
+        SHARED_DATA["active_trades"] = new_trades
+        state.save_shared_state(SHARED_DATA)
+        
+        return JSONResponse(content={"status": "success", "message": f"Position {symbol} closed"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+@app.post("/api/panic_close")
+async def panic_close():
+    """Liquidates all positions across all brokers."""
+    try:
+        logger.warning("🚨 PANIC CLOSE TRIGGERED FROM DASHBOARD")
+        executor = state.get_executor()
+        res = executor.close_all()
+        
+        SHARED_DATA["active_trades"] = []
+        state.save_shared_state(SHARED_DATA)
+        return JSONResponse(content={"status": "success", "results": res})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
 @app.post("/api/webhook/tradingview")
 async def tradingview_webhook(request: Request):
     """Entry point for Sovereign Institutional signals."""
@@ -255,6 +302,45 @@ async def tradingview_webhook(request: Request):
     except Exception as e:
         logger.error(f"❌ Webhook Error: {e}")
         return JSONResponse(status_code=400, content={"status": "error", "message": str(e)})
+
+@app.post("/api/market/toggle")
+async def toggle_market(request: Request):
+    data = await request.json()
+    symbol = data.get("symbol")
+    if symbol in SHARED_DATA["market_configs"]:
+        current = SHARED_DATA["market_configs"][symbol]["enabled"]
+        SHARED_DATA["market_configs"][symbol]["enabled"] = not current
+        
+        # Update active_markets list
+        SHARED_DATA["active_markets"] = [s for s, c in SHARED_DATA["market_configs"].items() if c["enabled"]]
+        
+        state.save_shared_state(SHARED_DATA)
+        return JSONResponse(content={"status": "success", "enabled": not current})
+    return JSONResponse(status_code=404, content={"status": "error", "message": "Symbol not found"})
+
+@app.post("/api/market/add")
+async def add_market(request: Request):
+    data = await request.json()
+    symbol = data.get("symbol").strip()
+    if symbol:
+        if symbol not in SHARED_DATA["market_configs"]:
+            SHARED_DATA["market_configs"][symbol] = {"enabled": True, "strategy": "JEWEL_ELITE"}
+            SHARED_DATA["active_markets"] = [s for s, c in SHARED_DATA["market_configs"].items() if c["enabled"]]
+            state.save_shared_state(SHARED_DATA)
+            return JSONResponse(content={"status": "success"})
+        return JSONResponse(content={"status": "exists"})
+    return JSONResponse(status_code=400, content={"status": "error", "message": "Invalid symbol"})
+
+@app.post("/api/market/remove")
+async def remove_market(request: Request):
+    data = await request.json()
+    symbol = data.get("symbol")
+    if symbol in SHARED_DATA["market_configs"]:
+        del SHARED_DATA["market_configs"][symbol]
+        SHARED_DATA["active_markets"] = [s for s, c in SHARED_DATA["market_configs"].items() if c["enabled"]]
+        state.save_shared_state(SHARED_DATA)
+        return JSONResponse(content={"status": "success"})
+    return JSONResponse(status_code=404, content={"status": "error", "message": "Symbol not found"})
 
 def run_server(host="0.0.0.0", port=8000):
     uvicorn.run(app, host=host, port=port, log_level="info")

@@ -45,8 +45,19 @@ class RiskEngine:
             return False, f"Passive Stop: Daily loss limit reached (${max_loss_usd:.2f})."
 
         # 3. Check Minimum Order Value
-        # (Assuming 'entry' * 'qty' is the face value)
-        order_value = signal.entry * signal.qty
+        # For MT5, we must multiply by contract size to get real face value.
+        multiplier = 1.0
+        if account.platform == "mt5":
+            if "XAU" in signal.symbol or "XAG" in signal.symbol:
+                multiplier = 100.0
+            elif "BTC" in signal.symbol or "ETH" in signal.symbol:
+                multiplier = 1.0 # Crypto usually 1 coin per lot
+            elif "AAPL" in signal.symbol or "TSLA" in signal.symbol:
+                multiplier = 1.0 # Stocks usually 1 share per lot
+            else:
+                multiplier = 100000.0 # Standard Forex Lot size
+                
+        order_value = signal.entry * signal.qty * multiplier
         if order_value < self.config.min_order_value_usd:
             return False, f"Order value ${order_value:.2f} too low (Min ${self.config.min_order_value_usd})."
 
@@ -65,13 +76,6 @@ class RiskEngine:
 
         return True, "Risk validation passed."
 
-    def calculate_position_size(self, symbol: str, account_equity: float, entry: float, stop_loss: float, score: float = 0.0) -> float:
-        """
-        Calculates qty based on asset-specific % risk, SL distance, and optional AI scaling.
-        """
-        # 1. Base Risk Calculation
-        risk_pct = self.config.risk_per_asset.get(symbol, self.config.risk_per_asset.get("DEFAULT", 1.0))
-        
     def _calculate_multiplier(self, score: float) -> float:
         """Calculates risk multiplier based on score (70-100)."""
         if score <= 0: return 1.0
@@ -98,7 +102,7 @@ class RiskEngine:
         if symbol in self.config.ai_scaling_symbols and score > 0:
             multiplier = self._calculate_multiplier(score)
             risk_pct *= multiplier
-            print(f"💎 AI Profile ({profile}) Auto-Sizing: {symbol} score={score} | Multiplier={multiplier:.2f}x | Final Risk={risk_pct:.2f}%")
+            print(f"AI Profile ({profile}) Auto-Sizing: {symbol} score={score} | Multiplier={multiplier:.2f}x | Final Risk={risk_pct:.2f}%")
         
         risk_amt = account_equity * (risk_pct / 100)
         risk_per_unit = abs(entry - stop_loss)
