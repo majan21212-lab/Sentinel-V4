@@ -47,7 +47,6 @@ jobs:
       - name: Deploy to GCE
         run: |
           gcloud compute ssh $INSTANCE_NAME --zone=$GCP_ZONE --tunnel-through-iap --command="
-            sudo systemctl stop tradebot.service && \
-            sudo docker pull us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest && \
-            sudo systemctl start tradebot.service
+            sudo docker pull us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest &&
+            sudo systemctl restart tradebot.service
           "

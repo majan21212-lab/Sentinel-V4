@@ -37,8 +37,6 @@ jobs:
       - name: Initialize & Build Flutter
         run: |
           cd FlutterApp
-          # Ensure project is initialized with proper metadata
-          flutter create . --platforms=android,ios --org com.jewelelite.bot --project-name jewel_elite
           flutter pub get
           # Build Android
           flutter build apk --release
