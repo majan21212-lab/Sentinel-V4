@@ -281,6 +281,13 @@ async def tradingview_webhook(request: Request):
     try:
         data = await request.json()
         logger.info(f"🏛️ RECEIVED SOVEREIGN WEBHOOK: {data}")
+
+        # ── Secret Key Validation ──────────────────────────────────────
+        expected_secret = os.getenv("WEBHOOK_SECRET", "SENTINEL_V4_SECRET")
+        if data.get("secret") != expected_secret:
+            logger.warning(f"🚫 Rejected webhook — invalid secret from {request.client.host}")
+            from fastapi.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(status_code=401, content={"status": "error", "message": "Unauthorized"})
         
         # 1. Identify Action
         action = data.get("action", "buy").lower()
@@ -294,7 +301,9 @@ async def tradingview_webhook(request: Request):
             "entry": float(data.get("price", 0)),
             "tp": float(data.get("tp", 0)),
             "sl": float(data.get("sl", 0)),
-            "pattern": f"Sovereign {action.capitalize()}",
+            "pattern": data.get("pattern", f"Sovereign {action.capitalize()}"),
+            "score": float(data.get("score", 0)),
+            "timeframe": data.get("timeframe", ""),
             "created_at": datetime.now().strftime("%H:%M:%S")
         }
         

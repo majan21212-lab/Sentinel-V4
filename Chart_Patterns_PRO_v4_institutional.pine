@@ -1,0 +1,207 @@
+// =============================================================================
+// CHART PATTERNS PRO v4.5 - The Jewel Institutional (Elirox Edition)
+// FULL PATTERN RESTORATION | SMC CONFLUENCE | NO-REPAINT | PREMIUM UI
+// Created by Antigravity
+// =============================================================================
+//@version=6
+strategy("Chart Patterns PRO v4.5 (Elirox Institutional)", 
+     overlay=true, 
+     initial_capital=1000, 
+     currency=currency.USD,
+     default_qty_type=strategy.percent_of_equity, 
+     default_qty_value=10, 
+     max_lines_count=500, 
+     max_labels_count=500, 
+     max_boxes_count=200,
+     process_orders_on_close=true,
+     calc_on_every_tick=false)
+
+// ── Types ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+type TradeSettings
+    float entry
+    float sl
+    float tp
+    int   direction
+    string p_name
+
+// ── Groups & Inputs ────────────────────────────────────────────────────────────────────────────────────────────────
+G_GEN  = "⚙️ General"
+G_SMC  = "🏦 Institutional Confluence (SMC)"
+G_RISK = "🛡️ Risk Management"
+G_DISP = "🎨 Elirox Aesthetics"
+G_HOOK = "🔗 GCP Webhook (Sentinel V4)"
+
+// --- General ---
+i_pvt      = input.int(5,    "Pivot Length", minval=2, maxval=10, group=G_GEN)
+i_lookback = input.int(50,   "Pattern Lookback (Bars)", minval=10, maxval=150, group=G_GEN)
+
+// --- Webhook ---
+i_webhook_enabled = input.bool(true, "Enable GCP Webhook Alerts", group=G_HOOK)
+i_secret_key      = input.string("SENTINEL_V4_SECRET", "Webhook Secret Key", group=G_HOOK, tooltip="Must match WEBHOOK_SECRET env var on your GCP bot.")
+
+// --- SMC Logic ---
+i_min_score = input.float(60.0, "Min Institutional Score (%)", minval=0, maxval=100, step=5, group=G_SMC)
+i_use_mtf   = input.bool(true,  "MTF Trend Alignment", group=G_SMC)
+i_mtf_res   = input.timeframe("240", "MTF Resolution", group=G_SMC)
+i_use_fvg   = input.bool(true,  "Fair Value Gap (FVG) Confirmation", group=G_SMC)
+i_use_sweep = input.bool(true,  "Liquidity Sweep Filter", group=G_SMC)
+
+// --- Risk ---
+i_risk_pct = input.float(1.0,  "Risk per Trade (%)", minval=0.1, maxval=10.0, group=G_RISK)
+i_rr       = input.float(2.0,  "Target Risk:Reward", minval=1.0, maxval=8.0, step=0.5, group=G_RISK)
+i_sl_atr   = input.float(1.5,  "SL ATR Multiplier", minval=0.5, maxval=4.0, group=G_RISK)
+
+// --- Aesthetics ---
+i_col_glass = input.color(color.new(#121212, 15), "Glass Background", group=G_DISP)
+i_col_bull  = input.color(#00E676, "Bullish Glow", group=G_DISP)
+i_col_bear  = input.color(#FF1744, "Bearish Glow", group=G_DISP)
+i_txt_col   = input.color(color.white, "Text Color", group=G_DISP)
+
+// ── SMC Indicators & Logic ─────────────────────────────────────────────────────────────────────────────────────────
+atr = ta.atr(14)
+rsi = ta.rsi(close, 14)
+ema200 = ta.ema(close, 200)
+vol_avg = ta.sma(volume, 20)
+
+// MTF Trend (No-Repaint)
+mtf_ema = request.security(syminfo.tickerid, i_mtf_res, ta.ema(close, 200)[1], gaps=barmerge.gaps_on, lookahead=barmerge.lookahead_off)
+
+// Fair Value Gap (FVG)
+fvg_bull = low > high[2] and close[1] > high[2]
+fvg_bear = high < low[2] and close[1] < low[2]
+
+// Liquidity Sweep (SMC)
+sweep_bull = low < ta.lowest(low, 20)[1] and close > ta.lowest(low, 20)[1]
+sweep_bear = high > ta.highest(high, 20)[1] and close < ta.highest(high, 20)[1]
+
+// Order Block Alignment (OB)
+is_ob_bull = (close - open) > (high - low) * 0.7 and volume > vol_avg
+is_ob_bear = (open - close) > (high - low) * 0.7 and volume > vol_avg
+
+f_get_confluence(bool is_bull) =>
+    float s = 0.0
+    // 1. Local Trend (20%)
+    if (is_bull ? close > ema200 : close < ema200) then s += 20
+    // 2. MTF Trend (20%)
+    if (na(mtf_ema) ? true : (is_bull ? close > mtf_ema : close < mtf_ema)) then s += 20
+    // 3. FVG Confirmation (20%)
+    if (is_bull ? fvg_bull : fvg_bear) or not i_use_fvg then s += 20
+    // 4. Liquidity Sweep (20%)
+    if (is_bull ? sweep_bull : sweep_bear) or not i_use_sweep then s += 20
+    // 5. Momentum/Volume (20%)
+    if (is_bull ? (rsi > 50 and volume > vol_avg) : (rsi < 50 and volume > vol_avg)) then s += 20
+    s
+
+// ── Execution & Visual Engine ──────────────────────────────────────────────────────────────────────────────────────
+f_dispatch(float entry, float sl, float tp, int dir, string name, float score) =>
+    if score >= i_min_score and barstate.isconfirmed
+        risk_val = strategy.equity * (i_risk_pct / 100)
+        float sl_d = math.abs(entry - sl)
+        float qty = sl_d > 0 ? risk_val / sl_d : na
+        
+        if not na(qty)
+            id = name + "_" + str.tostring(bar_index)
+            strategy.entry(id, dir == 1 ? strategy.long : strategy.short, qty=qty)
+            strategy.exit("X_" + id, id, stop=sl, limit=tp)
+            
+            // ── GCP Webhook Payload ────────────────────────────────────
+            // Paste this JSON as the Alert Message in TradingView.
+            // Set webhook URL to: http://34.27.93.107:8080/api/webhook/tradingview
+            if i_webhook_enabled
+                string action_str = dir == 1 ? "buy" : "sell"
+                string payload = "{" +
+                    "\"secret\": \"" + i_secret_key + "\", " +
+                    "\"action\": \"" + action_str + "\", " +
+                    "\"ticker\": \"{{ticker}}\", " +
+                    "\"price\": {{close}}, " +
+                    "\"tp\": " + str.tostring(math.round(tp, 5)) + ", " +
+                    "\"sl\": " + str.tostring(math.round(sl, 5)) + ", " +
+                    "\"pattern\": \"" + name + "\", " +
+                    "\"score\": " + str.tostring(math.round(score, 1)) + ", " +
+                    "\"timeframe\": \"{{interval}}\"" +
+                    "}"
+                alert(payload, alert.freq_once_per_bar_close)
+            
+            // ── Elirox Premium UI ──────────────────────────────────────
+            color edge = dir == 1 ? i_col_bull : i_col_bear
+            string yloc = dir == 1 ? label.style_label_up : label.style_label_down
+            float ypos = dir == 1 ? low - (atr * 0.8) : high + (atr * 0.8)
+            
+            string info = "💎 " + name + " (" + str.tostring(math.round(score,0)) + "%)\n" +
+                          "──────────────────\n" +
+                          "ENT: " + str.tostring(entry, format.mintick) + "\n" +
+                          "SL : " + str.tostring(sl,    format.mintick) + "\n" +
+                          "TP : " + str.tostring(tp,    format.mintick)
+            
+            label.new(bar_index, ypos, info, color=i_col_glass, textcolor=i_txt_col, style=yloc, size=size.normal)
+
+// ── Pivots & Core Pattern Engine ───────────────────────────────────────────────────────────────────────────────────
+ph_raw = ta.pivothigh(high, i_pvt, i_pvt)
+pl_raw = ta.pivotlow(low, i_pvt, i_pvt)
+
+var float ph1 = na, var int phi1 = na, var float ph2 = na, var int phi2 = na, var float ph3 = na, var int phi3 = na
+var float pl1 = na, var int pli1 = na, var float pl2 = na, var int pli2 = na, var float pl3 = na, var int pli3 = na
+
+if not na(ph_raw)
+    ph3 := ph2, phi3 := phi2, ph2 := ph1, phi2 := phi1, ph1 := ph_raw, phi1 := bar_index - i_pvt
+if not na(pl_raw)
+    pl3 := pl2, pli3 := pli2, pl2 := pl1, pli2 := pli1, pl1 := pl_raw, pli1 := bar_index - i_pvt
+
+tol = atr * 0.6
+
+// 1. Double Top/Bottom
+if not na(ph1) and not na(ph2) and math.abs(ph1 - ph2) < tol and (bar_index - phi1) <= i_lookback
+    float nk = low[ta.lowestbars(low, bar_index - phi2)]
+    if ta.crossunder(close, nk)
+        f_dispatch(close, ph1 + atr * i_sl_atr, nk - (ph1 - nk) * i_rr, -1, "Double Top", f_get_confluence(false))
+
+if not na(pl1) and not na(pl2) and math.abs(pl1 - pl2) < tol and (bar_index - pli1) <= i_lookback
+    float nk = high[ta.highestbars(high, bar_index - pli2)]
+    if ta.crossover(close, nk)
+        f_dispatch(close, pl1 - atr * i_sl_atr, nk + (nk - pl1) * i_rr, 1, "Double Bottom", f_get_confluence(true))
+
+// 2. Triple Top/Bottom
+if not na(ph1) and not na(ph2) and not na(ph3) and math.abs(ph1 - ph2) < tol and math.abs(ph2 - ph3) < tol
+    float nk = low[ta.lowestbars(low, bar_index - phi3)]
+    if ta.crossunder(close, nk)
+        f_dispatch(close, ph1 + atr * i_sl_atr, nk - (ph1 - nk) * i_rr, -1, "Triple Top", f_get_confluence(false))
+
+if not na(pl1) and not na(pl2) and not na(pl3) and math.abs(pl1 - pl2) < tol and math.abs(pl2 - pl3) < tol
+    float nk = high[ta.highestbars(high, bar_index - pli3)]
+    if ta.crossover(close, nk)
+        f_dispatch(close, pl1 - atr * i_sl_atr, nk + (nk - pl1) * i_rr, 1, "Triple Bottom", f_get_confluence(true))
+
+// 3. Head and Shoulders
+if not na(ph1) and not na(ph2) and not na(ph3) and ph2 > ph1 and ph2 > ph3 and math.abs(ph1 - ph3) < tol * 2
+    float nk = low[ta.lowestbars(low, bar_index - phi3)]
+    if ta.crossunder(close, nk)
+        f_dispatch(close, ph2 + atr * i_sl_atr, nk - (ph2 - nk) * i_rr, -1, "H&S Breakdown", f_get_confluence(false))
+
+if not na(pl1) and not na(pl2) and not na(pl3) and pl2 < pl1 and pl2 < pl3 and math.abs(pl1 - pl3) < tol * 2
+    float nk = high[ta.highestbars(high, bar_index - pli3)]
+    if ta.crossover(close, nk)
+        f_dispatch(close, pl2 - atr * i_sl_atr, nk + (nk - pl2) * i_rr, 1, "Inv H&S", f_get_confluence(true))
+
+// 4. Triangles & Wedges (Simplified Detection)
+if not na(ph1) and not na(pl1) and not na(ph2) and not na(pl2)
+    sym_up = ph1 < ph2 and pl1 > pl2 and ta.crossover(close, ph1)
+    sym_dn = ph1 < ph2 and pl1 > pl2 and ta.crossunder(close, pl1)
+    if sym_up
+        f_dispatch(close, pl1 - atr * i_sl_atr, close + (ph2 - pl2) * i_rr, 1, "Sym Triangle", f_get_confluence(true))
+    if sym_dn
+        f_dispatch(close, ph1 + atr * i_sl_atr, close - (ph2 - pl2) * i_rr, -1, "Sym Triangle", f_get_confluence(false))
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────────────────────
+var table dash = table.new(position.bottom_right, 2, 6, bgcolor=i_col_glass, border_width=1, border_color=color.gray)
+if barstate.islast
+    wr = strategy.closedtrades > 0 ? (strategy.wintrades / strategy.closedtrades) * 100 : 0
+    table.cell(dash, 0, 0, "💎 ELIROX v4.5", text_color=color.white)
+    table.cell(dash, 1, 0, "INSTITUTIONAL", text_color=i_col_bull)
+    table.cell(dash, 0, 1, "Win Rate", text_color=color.gray)
+    table.cell(dash, 1, 1, str.tostring(math.round(wr, 2)) + "%", text_color=color.white)
+    table.cell(dash, 0, 2, "Net Profit", text_color=color.gray)
+    table.cell(dash, 1, 2, "$" + str.tostring(math.round(strategy.netprofit, 2)), text_color=strategy.netprofit >= 0 ? i_col_bull : i_col_bear)
+    table.cell(dash, 0, 3, "Trades", text_color=color.gray)
+    table.cell(dash, 1, 3, str.tostring(strategy.closedtrades), text_color=color.white)
+    table.cell(dash, 0, 4, "MTF Trend", text_color=color.gray)
+    table.cell(dash, 1, 4, na(mtf_ema) ? "WAITING" : (close > mtf_ema ? "BULLISH" : "BEARISH"), text_color=close > (mtf_ema ?? 0) ? i_col_bull : i_col_bear)
