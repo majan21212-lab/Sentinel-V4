@@ -50,13 +50,13 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     Runs the Chart Patterns PRO / Jewel Elite strategy scanner for one symbol.
     """
     if df is None:
-        log.info("💎 Fetching historical data for %s...", symbol)
+        log.info("[JEWEL] Fetching historical data for %s...", symbol)
         df = fetch_data(symbol)
         
     if df is None:
         return
 
-    log.info("💎 Scanning %s for Jewel Elite Patterns (MTF mode)...", symbol)
+    log.info("[JEWEL] Scanning %s for Jewel Elite Patterns (MTF mode)...", symbol)
 
     # Instantiate engine with MTF data if provided as a dict
     if isinstance(df, dict):
@@ -74,12 +74,12 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     ml = get_ml_validator()
     confidence = ml.predict_confidence(raw_signal)
     if confidence < 0.45:
-        log.warning("🛑 💎 ML Check Failed for %s (Confidence: %.1f%%) - Trade Ignored", symbol, confidence * 100)
+        log.warning("[WARN] ML Check Failed for %s (Confidence: %.1f%%) - Trade Ignored", symbol, confidence * 100)
         return
 
     raw_signal["symbol"] = symbol
     log.info(
-        "🔥 PATTERN DETECTED: %s | Score: %s",
+        "[SIGNAL] PATTERN DETECTED: %s | Score: %s",
         raw_signal.get("pattern"),
         raw_signal.get("score"),
     )
@@ -294,6 +294,10 @@ def update_pnl():
         elif "XAG" in sym or "SILVER" in sym:
             # Silver: 1 Lot = 5000 oz. Price diff * 5000 * qty
             pnl = diff * 5000 * qty
+        elif "JPY" in sym:
+            # JPY Pairs: (Price Diff * 100,000 * qty) / Current Price
+            # JPY pip is 0.01. Multiplying by 100,000 is still standard unit volume.
+            pnl = (diff * 100000 * qty) / current_price
         else:
             # Standard Forex: 1 Lot = 100,000 units
             # PnL = (Price Diff) * 100,000 * qty (assuming USD is quote currency)
@@ -348,9 +352,10 @@ async def mt5_polling_loop(symbols: list, timeframe_str: str = "5m") -> None:
             executor._init_adapters()
             await asyncio.sleep(60)
             continue
+        break
 
-        # Map timeframe string to MT5 constant
-        tf_map = {
+    # Map timeframe string to MT5 constant
+    tf_map = {
         "1m": mt5.TIMEFRAME_M1,
         "5m": mt5.TIMEFRAME_M5,
         "15m": mt5.TIMEFRAME_M15,
@@ -405,24 +410,78 @@ def run_scheduler():
 
 
 async def pnl_update_loop():
-    """Rapid loop to fetch current ticks for active trades to make PnL dynamic."""
+    """Rapid loop to fetch actual positions from MT5 and sync the dashboard state."""
     executor = get_executor()
     adapter = executor.adapters.get("mt5")
     if not adapter: return
     
     while True:
         try:
-            active_trades = state.SHARED_DATA.get("active_trades", [])
-            if active_trades:
-                for trade in active_trades:
-                    sym = trade["symbol"]
-                    tick = mt5.symbol_info_tick(sym)
-                    if tick:
-                        # Use average of bid and ask for PnL calculation
-                        state.SHARED_DATA["prices"][sym] = (tick.bid + tick.ask) / 2
-                update_pnl()
+            # 1. Fetch Actual Positions from MT5
+            positions = mt5.positions_get()
+            if positions is None:
+                log.error("MT5: Failed to fetch positions in PnL loop")
+                await asyncio.sleep(5)
+                continue
+
+            # 2. Sync Account Balance
+            account_info = mt5.account_info()
+            if account_info:
+                state.SHARED_DATA["balance"] = account_info.balance
+                state.SHARED_DATA["equity"] = account_info.equity
+                if state.SHARED_DATA.get("demo_mode"):
+                    state.SHARED_DATA["demo_balance"] = account_info.balance
+
+            # 3. Rebuild active_trades list from MT5 data
+            current_active = []
+            history = state.SHARED_DATA.get("trade_history", [])
+            existing_active = {str(t.get("ticket")): t for t in state.SHARED_DATA.get("active_trades", [])}
+
+            for p in positions:
+                ticket_id = str(p.ticket)
+                # Calculate PnL manually for UI responsiveness
+                pnl = p.profit + p.swap
+                
+                # Check if we already have this trade recorded (to keep our custom metadata like 'time')
+                if ticket_id in existing_active:
+                    trade = existing_active[ticket_id]
+                    trade["pnl"] = round(pnl, 2)
+                    trade["current_price"] = p.price_current
+                else:
+                    # New trade detected directly from MT5
+                    trade = {
+                        "ticket": p.ticket,
+                        "symbol": p.symbol,
+                        "direction": "LONG" if p.type == mt5.POSITION_TYPE_BUY else "SHORT",
+                        "entry": p.price_open,
+                        "tp": p.tp,
+                        "sl": p.sl,
+                        "qty": p.volume,
+                        "pnl": round(pnl, 2),
+                        "status": "ACTIVE",
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                current_active.append(trade)
+
+            # 4. Check for trades that were in our list but are now gone from MT5 (Closed)
+            current_tickets = {str(p.ticket) for p in positions}
+            for ticket, trade in existing_active.items():
+                if ticket not in current_tickets:
+                    # Trade was closed externally (or via our button)
+                    trade["status"] = "CLOSED"
+                    trade["closed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    # Add to history if not already there
+                    if not any(str(h.get("ticket")) == ticket for h in history):
+                        history.insert(0, trade)
+            
+            state.SHARED_DATA["active_trades"] = current_active
+            state.SHARED_DATA["trade_history"] = history[:50]
+            
+            # Broadcast update by saving state
+            state.save_shared_state(state.SHARED_DATA)
+
         except Exception as e:
-            log.error("PnL Update Error: %s", e)
+            log.error("PnL/Sync Loop Error: %s", e)
         await asyncio.sleep(2)
 
 async def main_loop() -> None:

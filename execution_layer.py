@@ -47,6 +47,10 @@ class BaseExchangeAdapter(ABC):
     def close_all_positions(self) -> dict:
         pass
 
+    @abstractmethod
+    def close_symbol_positions(self, symbol: str) -> dict:
+        pass
+
 
 # ── Binance Adapter ───────────────────────────────────────────────────────────
 
@@ -208,6 +212,13 @@ class AlpacaAdapter(BaseExchangeAdapter):
             log.error("Alpaca list_positions error: %s", exc)
             return []
 
+    def close_symbol_positions(self, symbol: str) -> dict:
+        try:
+            self.api.close_position(symbol)
+            return {"status": "success", "symbol": symbol}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
 
 # ── MT5 Adapter ───────────────────────────────────────────────────────────────
 
@@ -226,7 +237,7 @@ class MT5Adapter(BaseExchangeAdapter):
     }
 
     def __init__(self):
-        if not mt5.initialize(path="C:/Program Files/MetaTrader 5/terminal64.exe"):
+        if not mt5.initialize():
             error = mt5.last_error()
             raise RuntimeError(f"MT5 initialisation failed: {error}")
 
@@ -262,10 +273,12 @@ class MT5Adapter(BaseExchangeAdapter):
         total_qty = float(signal.get("qty", 0.01))
         
         # Trade Scaling Logic: If tp2 is provided, split into two orders
-        targets = [signal.get("tp1")]
-        if signal.get("tp2"):
-            targets.append(signal.get("tp2"))
-            qty_per_order = total_qty / 2.0
+        tp1 = signal.get("tp1", signal.get("take_profit"))
+        tp2 = signal.get("tp2")
+        targets = [tp1]
+        if tp2:
+            targets.append(tp2)
+            qty_per_order = round(total_qty / 2.0, 2)
             # Ensure minimum lot size (0.01)
             if qty_per_order < 0.01:
                 qty_per_order = 0.01
@@ -281,8 +294,8 @@ class MT5Adapter(BaseExchangeAdapter):
                 "volume":       qty_per_order,
                 "type":         order_type,
                 "price":        price,
-                "sl":           float(signal["sl"]),
-                "tp":           float(target_price),
+                "sl":           float(signal.get("sl", signal.get("stop_loss", 0))),
+                "tp":           float(target_price if target_price else signal.get("take_profit", 0)),
                 "deviation":    20,
                 "magic":        self.magic,
                 "comment":      f"Jewel Elite {'TP'+str(targets.index(target_price)+1)}",
@@ -377,12 +390,37 @@ class MT5Adapter(BaseExchangeAdapter):
             if res and res.retcode == mt5.TRADE_RETCODE_DONE:
                 count += 1
                 detail_results.append({"ticket": p.ticket, "symbol": p.symbol, "status": "success"})
-            else:
-                msg = res.comment if res else "No response"
-                log.error("MT5: Failed to close %s (Ticket: %s): %s", p.symbol, p.ticket, msg)
-                detail_results.append({"ticket": p.ticket, "symbol": p.symbol, "status": "error", "message": msg})
-        
         return {"status": "success" if count == len(positions) else "partial", "closed_count": count, "details": detail_results}
+
+    def close_symbol_positions(self, symbol: str) -> dict:
+        positions = mt5.positions_get(symbol=symbol)
+        if not positions:
+            return {"status": "success", "message": "No positions to close", "closed_count": 0}
+            
+        count = 0
+        for p in positions:
+            tick = mt5.symbol_info_tick(p.symbol)
+            order_type = mt5.ORDER_TYPE_SELL if p.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
+            price = tick.bid if p.type == mt5.POSITION_TYPE_BUY else tick.ask
+            
+            request = {
+                "action":       mt5.TRADE_ACTION_DEAL,
+                "symbol":       p.symbol,
+                "volume":       p.volume,
+                "type":         order_type,
+                "position":     p.ticket,
+                "price":        price,
+                "deviation":    20,
+                "magic":        self.magic,
+                "comment":      "WEB CLOSE",
+                "type_time":    mt5.ORDER_TIME_GTC,
+                "type_filling": self.filling,
+            }
+            res = mt5.order_send(request)
+            if res and res.retcode == mt5.TRADE_RETCODE_DONE:
+                count += 1
+        
+        return {"status": "success", "closed_count": count}
 
 
 # ── Execution Layer ───────────────────────────────────────────────────────────
@@ -569,3 +607,10 @@ class ExecutionLayer:
         
         notifier.send_message("🚨 *GLOBAL PANIC CLOSE TRIGGERED*\nAll active positions have been liquidated across all brokers.")
         return results
+
+    def close_symbol(self, symbol: str, platform: str = None) -> dict:
+        target = (platform or os.getenv("DEFAULT_BROKER", "binance")).lower()
+        adapter = self.adapters.get(target)
+        if not adapter:
+            return {"status": "error", "message": f"Adapter {target} not active"}
+        return adapter.close_symbol_positions(symbol)

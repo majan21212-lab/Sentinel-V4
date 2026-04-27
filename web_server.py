@@ -180,7 +180,7 @@ async def broadcast_data():
             if active_connections:
                 payload = json.dumps(state.SHARED_DATA)
                 disconnected = set()
-                for ws in active_connections:
+                for ws in list(active_connections):
                     try:
                         await ws.send_text(payload)
                     except:
@@ -238,13 +238,26 @@ async def close_position(request: Request):
         logger.info(f"🛑 Manual Close Requested for {symbol}")
         
         active_trades = SHARED_DATA.get("active_trades", [])
-        # In a real scenario, we'd send a close order to the broker
-        # For this demo/phase, we remove it from the active list
-        new_trades = [t for t in active_trades if t["symbol"] != symbol]
-        SHARED_DATA["active_trades"] = new_trades
-        state.save_shared_state(SHARED_DATA)
         
-        return JSONResponse(content={"status": "success", "message": f"Position {symbol} closed"})
+        # Trigger actual broker close
+        executor = state.get_executor()
+        res = executor.close_symbol(symbol)
+        
+        if res.get("status") == "success":
+            closed_trade = next((t for t in active_trades if t["symbol"] == symbol), None)
+            if closed_trade:
+                closed_trade["status"] = "CLOSED"
+                closed_trade["closed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                history = SHARED_DATA.get("trade_history", [])
+                history.insert(0, closed_trade) # Add to start
+                SHARED_DATA["trade_history"] = history[:50] # Keep last 50
+                
+            new_trades = [t for t in active_trades if t["symbol"] != symbol]
+            SHARED_DATA["active_trades"] = new_trades
+            state.save_shared_state(SHARED_DATA)
+            return JSONResponse(content={"status": "success", "message": f"Position {symbol} closed"})
+        else:
+            return JSONResponse(status_code=500, content={"status": "error", "message": res.get("message", "Broker rejection")})
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 

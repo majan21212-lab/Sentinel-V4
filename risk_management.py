@@ -111,6 +111,15 @@ class RiskEngine:
             return 0.01
             
         qty = risk_amt / risk_per_unit
+
+        # Convert from raw units to MT5 Lots (1 Lot = 100,000 units for Forex)
+        # We use a simplified contract size detection
+        contract_size = 100000.0
+        if "XAU" in symbol or "XAG" in symbol: contract_size = 100.0
+        elif "BTC" in symbol or "ETH" in symbol: contract_size = 1.0
+        elif "AAPL" in symbol or "TSLA" in symbol: contract_size = 1.0
+
+        lots = qty / contract_size
         
-        # Adjust for typical lot increments
-        return round(qty, 2)
+        # Adjust for typical lot increments (min 0.01)
+        return max(0.01, round(lots, 2))
