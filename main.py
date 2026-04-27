@@ -1,122 +1,32 @@
-import asyncio
-import os
-import sys
+import time
 import logging
-import httpx
-import subprocess
-from datetime import datetime, timedelta
-try:
-    import MetaTrader5 as mt5
-    MT5_AVAILABLE = True
-except (ImportError, OSError):
-    mt5 = None
-    MT5_AVAILABLE = False
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import multiprocessing
+# Configure Logging for Cloud Logging (Stackdriver) compatibility
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-from dotenv import load_dotenv
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK - Bot is running")
+        else:
+            self.send_response(404)
+            self.end_headers()
 
-from core.logger import setup_logger
-from core.risk import RiskManager
-from ai.deepseek_client import DeepSeekClient
-from platforms.gateway import PlatformGateway
-from markets.market_bot import MarketBot
-from core.godmode import GodModeEngine
-import state_manager as state
-from cortex.optimizer import CortexOptimizer
-
-
-load_dotenv(override=True)
-
-async def main():
-    log = setup_logger("JEWEL_ELITE_CORE")
-    log.info("Starting Jewel Elite Multi-Market Core...")
-
-    pkg_path = os.path.dirname(os.path.abspath(__file__))
-    
-    # Use multiprocessing for PyInstaller compatibility
-    from web_server import run_server
-    dashboard_process = multiprocessing.Process(
-        target=run_server, 
-        kwargs={"host": "0.0.0.0", "port": 8000},
-        daemon=True
-    )
-    dashboard_process.start()
-
-    risk_manager = RiskManager()
-    ai_client = DeepSeekClient()
-    gateway = PlatformGateway()
-    
-    # Connect all configured platforms
-    await gateway.connect_all()
-
-    market_bots = {}
-    cortex = CortexOptimizer()
-    last_evolution = datetime.now() - timedelta(hours=1)
+def run_bot():
+    logging.info("Bot starting up...")
+    # Simulate bot logic loop
+    server_address = ('', 8080)
+    httpd = HTTPServer(server_address, HealthHandler)
+    logging.info("Health check server running on port 8080")
     
     try:
-        while True:
-            # 0. Sync state from disk (Persistent shared state)
-            state.SHARED_DATA = state.load_shared_state()
-            # 0. Cortex Evolution Cycle (Run every hour)
-            if datetime.now() - last_evolution > timedelta(hours=1):
-                log.info("Cortex is evolving...")
-                cortex.run_cycle()
-                last_evolution = datetime.now()
-
-            # 1. Global Kill Switch
-            if state.SHARED_DATA.get("kill_switch", False):
-                await asyncio.sleep(2)
-                continue
-
-            # Global Activation Check
-            if not state.SHARED_DATA.get("is_bot_active", False):
-                await asyncio.sleep(2)
-                continue
-
-            # Sync Market Bots with Shared State
-            active_symbols = state.SHARED_DATA.get("active_markets", ["XAUUSDm", "BTCUSDm"])
-            active_broker_name = state.SHARED_DATA.get("active_broker", "DEMO")
-            platform = gateway.adapters.get(active_broker_name, gateway.adapters["MT5"])
-
-            for sym in active_symbols:
-                if sym not in market_bots:
-                    market_bots[sym] = MarketBot(platform, risk_manager, ai_client, symbol=sym)
-                else:
-                    # Update platform if it changed in settings
-                    market_bots[sym].platform = platform
-
-            strategy_mode = state.SHARED_DATA.get("strategy_mode", "PATTERN")
-            for symbol in active_symbols:
-                if strategy_mode == "PATTERN":
-                    # Simulated data fetch for demo
-                    timeframe = mt5.TIMEFRAME_M15 if MT5_AVAILABLE else 15
-                    log.info(f"[{symbol}] Fetching data for analysis...")
-                    df_m15 = await asyncio.to_thread(platform.fetch_historical_data, symbol, timeframe, 300) if hasattr(platform, 'fetch_historical_data') else None
-
-                    if df_m15 is not None and not df_m15.empty:
-                        log.info(f"[{symbol}] Data received. Analyzing with GodModeEngine...")
-                        engine = GodModeEngine(df_m15)
-                        raw_signal = engine.analyze()
-                        if raw_signal:
-                            raw_signal["symbol"] = symbol
-                            log.info(f"[{symbol}] SIGNAL DETECTED: {raw_signal['direction']} (Score: {raw_signal.get('score', 'N/A')})")
-                            asyncio.create_task(market_bots[symbol].process_signal(raw_signal))
-                        else:
-                            log.info(f"[{symbol}] No valid signal at this time.")
-                elif strategy_mode == "GRID":
-                    log.info(f"GRID MONITORING {symbol}")
-                elif strategy_mode == "DCA":
-                    log.info(f"DCA MONITORING {symbol}")
-
-            await asyncio.sleep(10) # Increased sleep for readability in logs    except asyncio.CancelledError:
-        log.info("Shutting down...")
-    finally:
-        dashboard_process.terminate()
-
-if __name__ == "__main__":
-    multiprocessing.freeze_support()
-    try:
-        asyncio.run(main())
+        httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+    httpd.server_close()
+
+if __name__ == "__main__":
+    run_bot()
