@@ -1,0 +1,20 @@
+[Unit]
+Description=TradeBot Sentinel V4 — Full Production Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+RestartSec=10s
+ExecStartPre=-/usr/bin/docker stop tradebot
+ExecStartPre=-/usr/bin/docker rm tradebot
+ExecStart=/usr/bin/docker run \
+  --name tradebot \
+  --env-file /etc/tradebot.env \
+  -p 8080:8080 \
+  -v /opt/tradebot/data:/app/data \
+  us-central1-docker.pkg.dev/project-74a8fea6-391c-458b-832/tradebot-repo/tradebot:latest
+
+[Install]
+WantedBy=multi-user.target

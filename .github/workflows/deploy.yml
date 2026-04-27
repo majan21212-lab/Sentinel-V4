@@ -1,0 +1,53 @@
+name: Deploy TradeBot to GCP
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: project-74a8fea6-391c-458b-832
+  GCP_REGION: us-central1
+  GCP_ZONE: us-central1-a
+  REPOSITORY: tradebot-repo
+  IMAGE: tradebot
+  INSTANCE_NAME: tradebot-instance
+  WIF_PROVIDER: projects/217006324676/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  WIF_SERVICE_ACCOUNT: github-deployer@project-74a8fea6-391c-458b-832.iam.gserviceaccount.com
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: '${{ env.WIF_PROVIDER }}'
+          service_account: '${{ env.WIF_SERVICE_ACCOUNT }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Docker Auth'
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }} .
+          docker tag us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }} us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }}
+          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
+
+      - name: Deploy to GCE
+        run: |
+          gcloud compute ssh $INSTANCE_NAME --zone=$GCP_ZONE --tunnel-through-iap --command="
+            sudo systemctl stop tradebot.service && \
+            sudo docker pull us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest && \
+            sudo systemctl start tradebot.service
+          "

@@ -10,8 +10,19 @@ from abc import ABC, abstractmethod
 import ccxt
 import alpaca_trade_api as tradeapi
 import pandas as pd
-import MetaTrader5 as mt5
 from dotenv import load_dotenv
+
+# MetaTrader5 is Windows-only — skip gracefully on Linux (GCP)
+_MT5_DISABLED = os.getenv("MT5_DISABLED", "false").lower() == "true"
+if not _MT5_DISABLED:
+    try:
+        import MetaTrader5 as mt5
+    except ImportError:
+        _MT5_DISABLED = True
+        mt5 = None
+        logging.warning("MetaTrader5 not available — MT5Adapter disabled.")
+else:
+    mt5 = None
 
 # Models are defined in models.py — import once here, never re-import below.
 from models import Signal, WebhookSignal, AccountStatus, RiskConfig, Direction
@@ -237,6 +248,8 @@ class MT5Adapter(BaseExchangeAdapter):
     }
 
     def __init__(self):
+        if _MT5_DISABLED or mt5 is None:
+            raise RuntimeError("MT5Adapter is disabled (MT5_DISABLED=true or MetaTrader5 not installed).")
         if not mt5.initialize():
             error = mt5.last_error()
             raise RuntimeError(f"MT5 initialisation failed: {error}")
@@ -450,7 +463,7 @@ class ExecutionLayer:
             except Exception as exc:
                 log.warning("AlpacaAdapter failed to initialise: %s", exc)
 
-        if os.getenv("EXNESS_ACCOUNT"):
+        if os.getenv("EXNESS_ACCOUNT") and not _MT5_DISABLED:
             try:
                 self.adapters["mt5"] = MT5Adapter()
             except Exception as exc:
