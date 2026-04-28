@@ -9,8 +9,8 @@ final class TradeBotAPIService: ObservableObject {
     static let shared = TradeBotAPIService()
 
     // ── Config ────────────────────────────────────────────────────────────
-    private let baseURL = "http://34.27.93.107:8080"
-    private let wsURL   = "ws://34.27.93.107:8080/ws"
+    private let baseURL = "http://34.26.143.224:8000"
+    private let wsURL   = "ws://34.26.143.224:8000/ws"
     private let webhookSecret = "SENTINEL_V4_SECRET"
 
     // ── WebSocket State ───────────────────────────────────────────────────
