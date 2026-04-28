@@ -28,7 +28,7 @@ jobs:
       - name: Initialize Flutter Project
         run: |
           cd FlutterApp
-          flutter create . --platforms=android,ios --namespace=com.jewelelite.bot
+          flutter create . --platforms=android,ios --org com.jewelelite.bot
           flutter pub get
         shell: bash
 
