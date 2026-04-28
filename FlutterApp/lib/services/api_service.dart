@@ -7,9 +7,9 @@ import '../models/trade_models.dart';
 /// Sentinel V4 — Live GCP Bot API Service
 /// Endpoint: http://34.27.93.107:8080
 class ApiService {
-  // ── Live GCP Bot Endpoints ───────────────────────────────────────────
-  static const String baseUrl = "http://34.27.93.107:8080";
-  static const String wsUrl   = "ws://34.27.93.107:8080/ws";
+  // ── Live VPS Bot Endpoints ───────────────────────────────────────────
+  static const String baseUrl = "http://34.26.143.224:8000";
+  static const String wsUrl   = "ws://34.26.143.224:8000/ws";
 
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
@@ -19,7 +19,7 @@ class ApiService {
   StreamController<Map<String, dynamic>>? _streamController;
 
   // ── WebSocket Real-Time Stream ────────────────────────────────────────
-  Stream<Map<String, dynamic>> get liveStream {
+  Stream<Map<String, dynamic>> get marketStream {
     _streamController ??= StreamController<Map<String, dynamic>>.broadcast(
       onListen: _connectWebSocket,
       onCancel: _disconnectWebSocket,
