@@ -44,7 +44,12 @@ jobs:
           docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }}
           docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
 
-      - name: Deploy to GCE
+      - name: Update Service File on GCE
+        run: |
+          gcloud compute scp tradebot.service $INSTANCE_NAME:/tmp/tradebot.service --zone=$GCP_ZONE --tunnel-through-iap
+          gcloud compute ssh $INSTANCE_NAME --zone=$GCP_ZONE --tunnel-through-iap --command="sudo mv /tmp/tradebot.service /etc/systemd/system/tradebot.service && sudo systemctl daemon-reload"
+
+      - name: Deploy and Restart
         run: |
           gcloud compute ssh $INSTANCE_NAME --zone=$GCP_ZONE --tunnel-through-iap --command="
             sudo gcloud auth configure-docker us-central1-docker.pkg.dev --quiet && \

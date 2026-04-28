@@ -37,6 +37,7 @@ jobs:
       - name: Initialize & Build Flutter
         run: |
           cd FlutterApp
+          flutter create . --platforms=android,ios
           flutter pub get
           # Build Android
           flutter build apk --release
