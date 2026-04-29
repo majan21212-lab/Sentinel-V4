@@ -38,13 +38,17 @@ class RiskEngine:
         if account.open_positions >= self.config.max_open_positions:
             return False, f"Max {profile} open positions reached ({self.config.max_open_positions})."
 
-        # 1. Check Daily Drawdown (Passive Stop)
+        # 2. Prevent Duplicate Trades on same symbol
+        if signal.symbol in account.active_symbols:
+            return False, f"Duplicate Trade: Position for {signal.symbol} already open."
+
+        # 3. Check Daily Drawdown (Passive Stop)
         # If daily pnl is below the max allowed loss %, stop taking NEW trades
         max_loss_usd = account.equity * (self.config.max_daily_loss_pct / 100)
         if account.daily_pnl < -max_loss_usd and max_loss_usd > 0:
             return False, f"Passive Stop: Daily loss limit reached (${max_loss_usd:.2f})."
 
-        # 3. Check Minimum Order Value
+        # 4. Check Minimum Order Value
         # For MT5, we must multiply by contract size to get real face value.
         multiplier = 1.0
         if account.platform == "mt5":
@@ -61,7 +65,7 @@ class RiskEngine:
         if order_value < self.config.min_order_value_usd:
             return False, f"Order value ${order_value:.2f} too low (Min ${self.config.min_order_value_usd})."
 
-        # 4. Correlation Risk Check
+        # 5. Check Correlation Risk
         correlation_groups = [
             {"BTC/USDT", "ETH/USDT", "SOL/USDT"},
             {"XAUUSD", "EURUSD"}
