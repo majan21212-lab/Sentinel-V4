@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:glassmorphism/glassmorphism.dart';
 import 'services/api_service.dart';
 import 'models/trade_models.dart';
 
@@ -17,6 +18,12 @@ class ThemeColors {
   static const warning = Color(0xFFFBC02D);
   static const textMain = Colors.white;
   static const textDim = Color(0xFF808090);
+
+  static const primaryGradient = LinearGradient(
+    colors: [primary, Color(0xFF9D50BB)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 }
 
 class JewelEliteApp extends StatelessWidget {
@@ -210,36 +217,97 @@ class _MainDashboardViewState extends State<MainDashboardView> {
   }
 
   Widget _buildKPICard(String title, String value, String sub, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: ThemeColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(color: ThemeColors.textDim, fontSize: 9, fontWeight: FontWeight.bold)),
-          const Spacer(),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          Text(sub, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
-        ],
+    return GlassmorphicContainer(
+      width: double.infinity,
+      height: double.infinity,
+      borderRadius: 16,
+      blur: 20,
+      alignment: Alignment.bottomLeft,
+      border: 2,
+      linearGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.1),
+            Colors.white.withOpacity(0.05),
+          ],
+          stops: const [0.1, 1]),
+      borderGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity(0.5),
+            color.withOpacity(0.2),
+          ]),
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(color: ThemeColors.textDim, fontSize: 9, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text(sub, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    return Container(
+    return GlassmorphicContainer(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      decoration: BoxDecoration(color: ThemeColors.surface, borderRadius: BorderRadius.circular(16)),
+      height: 160,
+      borderRadius: 16,
+      blur: 20,
+      alignment: Alignment.center,
+      border: 2,
+      linearGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.02),
+            Colors.white.withOpacity(0.05),
+          ]),
+      borderGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            ThemeColors.primary.withOpacity(0.2),
+            Colors.transparent,
+          ]),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(strokeWidth: 2, color: ThemeColors.primary),
-          const SizedBox(height: 15),
-          const Text("Awaiting institutional opportunities...", style: TextStyle(color: ThemeColors.textDim, fontSize: 11)),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(seconds: 2),
+            curve: Curves.easeInOut,
+            builder: (context, value, child) {
+              return Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: ThemeColors.primary.withOpacity(0.2 * value),
+                      blurRadius: 15 * value,
+                      spreadRadius: 5 * value,
+                    )
+                  ],
+                ),
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2, 
+                  valueColor: AlwaysStoppedAnimation<Color>(ThemeColors.primary),
+                ),
+              );
+            },
+            onEnd: () {}, // Handled by repetitive animation if needed
+          ),
+          const SizedBox(height: 20),
+          const Text("Awaiting institutional opportunities...", 
+            style: TextStyle(color: ThemeColors.textDim, fontSize: 11, letterSpacing: 0.5)),
         ],
       ),
     );
@@ -247,30 +315,64 @@ class _MainDashboardViewState extends State<MainDashboardView> {
 
   Widget _buildSignalRow(TradeSignal sig) {
     final bool isLong = sig.direction.contains("LONG");
-    return Container(
+    final Color color = isLong ? ThemeColors.success : ThemeColors.danger;
+    
+    return GlassmorphicContainer(
+      width: double.infinity,
+      height: 70,
+      borderRadius: 12,
+      blur: 15,
+      alignment: Alignment.center,
+      border: 1,
+      linearGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.05),
+            Colors.white.withOpacity(0.02),
+          ]),
+      borderGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity(0.2),
+            Colors.transparent,
+          ]),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: ThemeColors.surface, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(sig.symbol, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text(sig.pattern, style: const TextStyle(color: ThemeColors.textDim, fontSize: 10)),
-            ],
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: (isLong ? ThemeColors.success : ThemeColors.danger).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        child: Row(
+          children: [
+            Container(
+              width: 4, height: 30,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(2),
+                boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)],
+              ),
             ),
-            child: Text(sig.direction, 
-              style: TextStyle(color: isLong ? ThemeColors.success : ThemeColors.danger, fontSize: 10, fontWeight: FontWeight.bold)),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(sig.symbol, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5)),
+                Text(sig.pattern.toUpperCase(), style: const TextStyle(color: ThemeColors.textDim, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: color.withOpacity(0.2)),
+              ),
+              child: Text(sig.direction, 
+                style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -301,23 +403,55 @@ class _MainDashboardViewState extends State<MainDashboardView> {
 
   Widget _buildTradeCard(Map<String, dynamic> trade) {
     final bool isLong = trade['direction'].toString().contains("BUY") || trade['direction'].toString().contains("LONG");
-    return Container(
+    final Color color = isLong ? ThemeColors.success : ThemeColors.danger;
+
+    return GlassmorphicContainer(
+      width: double.infinity,
+      height: 80,
+      borderRadius: 12,
+      blur: 15,
+      alignment: Alignment.center,
+      border: 1,
+      linearGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.05),
+            Colors.white.withOpacity(0.02),
+          ]),
+      borderGradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity(0.2),
+            Colors.transparent,
+          ]),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: ThemeColors.surface, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(trade['symbol'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text("Entry: ${trade['entry']}", style: const TextStyle(color: ThemeColors.textDim, fontSize: 10)),
-            ],
-          ),
-          const Spacer(),
-          Text(isLong ? "BUY" : "SELL", 
-            style: TextStyle(color: isLong ? ThemeColors.success : ThemeColors.danger, fontWeight: FontWeight.bold)),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        child: Row(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(trade['symbol'], style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5)),
+                Text("ENTRY: ${trade['entry']}", style: const TextStyle(color: ThemeColors.textDim, fontSize: 9, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Spacer(),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(isLong ? "BUY" : "SELL", 
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 12)),
+                const SizedBox(height: 4),
+                const Text("LIVE", style: TextStyle(color: ThemeColors.success, fontSize: 8, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -406,11 +540,11 @@ class _MainDashboardViewState extends State<MainDashboardView> {
       unselectedItemColor: ThemeColors.textDim,
       selectedFontSize: 9,
       unselectedFontSize: 9,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: "DASHBOARD"),
-        BottomNavigationBarItem(icon: Icon(Icons.bolt), label: "SIGNALS"),
-        BottomNavigationBarItem(icon: Icon(Icons.pie_chart_rounded), label: "PORTFOLIO"),
-        BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: "SETTINGS"),
+      items: [
+        const BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: "DASHBOARD"),
+        const BottomNavigationBarItem(icon: Icon(Icons.bolt), label: "SIGNALS"),
+        const BottomNavigationBarItem(icon: Icon(Icons.pie_chart_rounded), label: "PORTFOLIO"),
+        const BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: "SETTINGS"),
       ],
     );
   }
