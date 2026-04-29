@@ -236,10 +236,10 @@ class _MainDashboardViewState extends State<MainDashboardView> {
       padding: const EdgeInsets.symmetric(vertical: 40),
       decoration: BoxDecoration(color: ThemeColors.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
-        children: const [
-          CircularProgressIndicator(strokeWidth: 2, color: ThemeColors.primary),
-          SizedBox(height: 15),
-          Text("Awaiting institutional opportunities...", style: TextStyle(color: ThemeColors.textDim, fontSize: 11)),
+        children: [
+          const CircularProgressIndicator(strokeWidth: 2, color: ThemeColors.primary),
+          const SizedBox(height: 15),
+          const Text("Awaiting institutional opportunities...", style: TextStyle(color: ThemeColors.textDim, fontSize: 11)),
         ],
       ),
     );
