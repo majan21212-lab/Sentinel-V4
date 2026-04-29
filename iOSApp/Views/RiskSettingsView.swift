@@ -4,14 +4,12 @@ struct RiskSettingsView: View {
     @StateObject var vm = RiskSettingsViewModel()
     
     var body: some View {
-    var body: some View {
         ZStack {
             AmbientGlow()
                 .edgesIgnoringSafeArea(.all)
             
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 25) {
-                    
                     // 1. Core Profile Control
                     VStack(alignment: .leading, spacing: 15) {
                         Text("ENVIRONMENT CONTROL")
@@ -45,7 +43,7 @@ struct RiskSettingsView: View {
                             HStack {
                                 Text("Daily Loss Limit")
                                 Spacer()
-                                Text("\(String(format: "%.1f", vm.maxDailyLoss))%")
+                                Text("\(String(format: \"%.1f\", vm.maxDailyLoss))%")
                                     .foregroundColor(Theme.accentBlue)
                                     .bold()
                             }
@@ -63,34 +61,42 @@ struct RiskSettingsView: View {
                     }
                     .glassCard(cornerRadius: 24)
             
-            Section(header: Text("Asset Risk Allocation")) {
-                ForEach(vm.riskPerAsset.keys.sorted(), id: \.self) { asset in
-                    VStack {
-                        HStack {
-                            Text(asset)
-                            Spacer()
-                            Text("\(String(format: "%.1f", vm.riskPerAsset[asset] ?? 0))%")
-                                .foregroundColor(.blue)
-                        }
+                    // 3. Asset Risk Allocation
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("ASSET RISK ALLOCATION")
+                            .font(.system(size: 10, weight: .black))
+                            .tracking(2)
+                            .foregroundColor(.secondary)
                         
-                        // AI Scaling Toggle per asset
-                        if asset != "DEFAULT" {
-                            Toggle(isOn: Binding(
-                                get: { vm.aiScalingSymbols.contains(asset) },
-                                set: { _ in vm.toggleAIScaling(for: asset) }
-                            )) {
-                                Label("AI Auto-Sizing", systemImage: "brain.head.profile")
-                                    .font(.caption2)
-                                    .foregroundColor(.blue.opacity(0.8))
+                        ForEach(vm.riskPerAsset.keys.sorted(), id: \.self) { asset in
+                            VStack {
+                                HStack {
+                                    Text(asset)
+                                    Spacer()
+                                    Text("\(String(format: \"%.1f\", vm.riskPerAsset[asset] ?? 0))%")
+                                        .foregroundColor(.blue)
+                                }
+                                
+                                // AI Scaling Toggle per asset
+                                if asset != "DEFAULT" {
+                                    Toggle(isOn: Binding(
+                                        get: { vm.aiScalingSymbols.contains(asset) },
+                                        set: { _ in vm.toggleAIScaling(for: asset) }
+                                    )) {
+                                        Label("AI Auto-Sizing", systemImage: "brain.head.profile")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue.opacity(0.8))
+                                    }
+                                    .padding(.top, 4)
+                                }
                             }
-                            .padding(.top, 4)
+                            .padding(.vertical, 4)
                         }
                     }
-                    .padding(.vertical, 4)
-                }
-            }
+                    .glassCard(cornerRadius: 24)
+                    .padding(.horizontal)
             
-                    // 3. AI Aggression
+                    // 4. AI Aggression
                     VStack(alignment: .leading, spacing: 20) {
                         Text("AI SCALING AGGRESSION")
                             .font(.system(size: 10, weight: .black))
@@ -98,25 +104,25 @@ struct RiskSettingsView: View {
                             .foregroundColor(.secondary)
                         
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Scaling Intensity: \(String(format: "%.1f", vm.minMultiplier))x - \(String(format: "%.1f", vm.maxMultiplier))x")
+                            Text("Scaling Intensity: \(String(format: \"%.1f\", vm.minMultiplier))x - \(String(format: \"%.1f\", vm.maxMultiplier))x")
                                 .font(.caption2)
                             
                             HStack {
                                 Text("MIN")
                                 Slider(value: $vm.minMultiplier, in: 0.1...1.0, step: 0.1)
-                                Text("\(String(format: "%.1f", vm.minMultiplier))x")
+                                Text("\(String(format: \"%.1f\", vm.minMultiplier))x")
                             }
                             
                             HStack {
                                 Text("MAX")
                                 Slider(value: $vm.maxMultiplier, in: 1.0...3.0, step: 0.1)
-                                Text("\(String(format: "%.1f", vm.maxMultiplier))x")
+                                Text("\(String(format: \"%.1f\", vm.maxMultiplier))x")
                             }
                         }
                     }
                     .glassCard(cornerRadius: 24)
                     
-                    // 4. Sync Button
+                    // 5. Sync Button
                     Button(action: { vm.prepareSave() }) {
                         HStack {
                             if vm.isLoading {
