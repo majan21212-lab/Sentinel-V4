@@ -28,6 +28,7 @@ jobs:
       - name: Initialize Flutter Project
         run: |
           cd FlutterApp
+          # If ios/android folders are missing, create them but don't overwrite lib/
           flutter create . --platforms=android,ios --org com.jewelelite.bot
           flutter pub get
         shell: bash
