@@ -62,10 +62,25 @@ class _MainDashboardViewState extends State<MainDashboardView> {
     _api.marketStream.listen((data) {
       if (mounted) {
         setState(() {
+          // Sync Balance
           if (data['demo_balance'] != null) _balance = data['demo_balance'].toStringAsFixed(2);
           else if (data['balance'] != null) _balance = data['balance'].toStringAsFixed(2);
           
+          // Sync Bot Status
           if (data['is_bot_active'] != null) _autoTrade = data['is_bot_active'];
+          
+          // Sync Risk Settings
+          if (data['is_cent_account'] != null) _isCentAccount = data['is_cent_account'];
+          if (data['active_profile'] != null) _activeProfile = data['active_profile'];
+          
+          // Sync Metrics
+          if (data['win_rate'] != null) _winRate = data['win_rate'];
+          if (data['drawdown'] != null) _drawdown = data['drawdown'];
+          
+          // Sync Active Trades
+          if (data['active_trades'] != null) {
+            _activeTrades = List<Map<String, dynamic>>.from(data['active_trades']);
+          }
         });
       }
     });
@@ -268,19 +283,107 @@ class _MainDashboardViewState extends State<MainDashboardView> {
     );
   }
 
+  List<Map<String, dynamic>> _activeTrades = [];
+
   Widget _buildPortfolioTab() {
-    return const Center(child: Text("Portfolio Integration Offline", style: TextStyle(color: ThemeColors.textDim)));
+    if (_activeTrades.isEmpty) {
+      return const Center(child: Text("No Active Trades", style: TextStyle(color: ThemeColors.textDim)));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: _activeTrades.length,
+      itemBuilder: (context, index) {
+        final t = _activeTrades[index];
+        return _buildTradeCard(t);
+      },
+    );
   }
+
+  Widget _buildTradeCard(Map<String, dynamic> trade) {
+    final bool isLong = trade['direction'].toString().contains("BUY") || trade['direction'].toString().contains("LONG");
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(color: ThemeColors.surface, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(trade['symbol'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text("Entry: ${trade['entry']}", style: const TextStyle(color: ThemeColors.textDim, fontSize: 10)),
+            ],
+          ),
+          const Spacer(),
+          Text(isLong ? "BUY" : "SELL", 
+            style: TextStyle(color: isLong ? ThemeColors.success : ThemeColors.danger, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  bool _isCentAccount = false;
+  String _activeProfile = "CONSERVATIVE";
 
   Widget _buildSettingsTab() {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _settingsTile("Account Funding", Icons.account_balance_wallet, () {}),
-        _settingsTile("Broker Connectivity", Icons.link, () {}),
-        _settingsTile("Risk Parameters", Icons.security, () {}),
-        _settingsTile("Master Kill Switch", Icons.power_settings_new, () {}, color: ThemeColors.danger),
+        _settingsTile("Account Funding", Icons.account_balance_wallet, () {
+          _showInfo("Deposit/Withdrawal via Exness Dashboard is recommended.");
+        }),
+        _settingsTile("Broker Connectivity", Icons.link, () {
+          _showInfo("Connected to Exness MT5 (Live)");
+        }),
+        _settingsTile("Risk Parameters", Icons.security, () {
+          _showRiskSettings();
+        }),
+        _settingsTile("Master Kill Switch", Icons.power_settings_new, () {
+          _api.updateSettings({"is_bot_active": false});
+          setState(() => _autoTrade = false);
+        }, color: ThemeColors.danger),
       ],
+    );
+  }
+
+  void _showInfo(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: ThemeColors.primary));
+  }
+
+  void _showRiskSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: ThemeColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          padding: const EdgeInsets.all(25),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("RISK PARAMETERS", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 20),
+              SwitchListTile(
+                title: const Text("Cent Account Mode", style: TextStyle(fontSize: 14)),
+                subtitle: const Text("Optimizes for $20 - $500 balances", style: TextStyle(fontSize: 10, color: ThemeColors.textDim)),
+                value: _isCentAccount,
+                activeColor: ThemeColors.primary,
+                onChanged: (val) {
+                  _api.updateSettings({"is_cent_account": val});
+                  setModalState(() => _isCentAccount = val);
+                  setState(() => _isCentAccount = val);
+                },
+              ),
+              const Divider(color: Colors.white10),
+              ListTile(
+                title: const Text("Risk Profile", style: TextStyle(fontSize: 14)),
+                trailing: Text(_activeProfile, style: const TextStyle(color: ThemeColors.primary, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
