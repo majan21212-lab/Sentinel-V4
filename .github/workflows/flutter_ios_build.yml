@@ -1,0 +1,56 @@
+name: Build Flutter iOS Installer
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Flutter iOS (Unsigned)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: |
+          cd FlutterApp
+          flutter pub get
+
+      - name: Initialize iOS Platform
+        run: |
+          cd FlutterApp
+          # Only create missing platform files, do not overwrite source
+          if [ ! -d "ios" ]; then
+            flutter create --platforms=ios --org com.jewelelite.bot .
+          fi
+          flutter pub get
+
+      - name: Build iOS App Bundle
+        run: |
+          cd FlutterApp
+          # Build without codesigning
+          flutter build ios --release --no-codesign
+
+      - name: Create IPA Structure
+        run: |
+          mkdir -p Payload
+          # Move the .app bundle into the Payload folder
+          cp -r FlutterApp/build/ios/iphoneos/Runner.app Payload/
+          # Zip it into an IPA
+          zip -r JewelElite_Flutter.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JewelElite_Flutter_IPA
+          path: JewelElite_Flutter.ipa
+          retention-days: 7

@@ -62,20 +62,16 @@ class _MainDashboardViewState extends State<MainDashboardView> {
     _api.marketStream.listen((data) {
       if (mounted) {
         setState(() {
-          // Sync Balance
-          if (data['demo_balance'] != null) _balance = data['demo_balance'].toStringAsFixed(2);
-          else if (data['balance'] != null) _balance = data['balance'].toStringAsFixed(2);
+          // Sync Balance (handle both double and string)
+          var bal = data['balance'] ?? data['demo_balance'] ?? 0.0;
+          _balance = bal.toStringAsFixed(2);
           
           // Sync Bot Status
           if (data['is_bot_active'] != null) _autoTrade = data['is_bot_active'];
           
-          // Sync Risk Settings
-          if (data['is_cent_account'] != null) _isCentAccount = data['is_cent_account'];
-          if (data['active_profile'] != null) _activeProfile = data['active_profile'];
-          
           // Sync Metrics
-          if (data['win_rate'] != null) _winRate = data['win_rate'];
-          if (data['drawdown'] != null) _drawdown = data['drawdown'];
+          if (data['win_rate'] != null) _winRate = double.tryParse(data['win_rate'].toString()) ?? _winRate;
+          if (data['drawdown'] != null) _drawdown = double.tryParse(data['drawdown'].toString()) ?? _drawdown;
           
           // Sync Active Trades
           if (data['active_trades'] != null) {
