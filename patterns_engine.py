@@ -1,9 +1,31 @@
 import pandas as pd
 import numpy as np
-import pandas_ta as ta
 import logging
 
 log = logging.getLogger(__name__)
+
+# ── TA helper functions (replaces pandas_ta) ─────────────────────────────────
+def _ema(series, length):
+    return series.ewm(span=length, adjust=False).mean()
+
+def _sma(series, length):
+    return series.rolling(window=length).mean()
+
+def _rsi(series, length=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1/length, min_periods=length).mean()
+    avg_loss = loss.ewm(alpha=1/length, min_periods=length).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+def _atr(high, low, close, length=14):
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    return tr.rolling(window=length).mean()
 
 class PatternsEngine:
     def __init__(self, m5_df, m15_df=None, h1_df=None):
@@ -28,13 +50,13 @@ class PatternsEngine:
         """Prepare core indicators for the main timeframe."""
         df = self.df
         if 'ema200' not in df.columns:
-            df['ema200'] = ta.ema(df['close'], length=200)
+            df['ema200'] = _ema(df['close'], length=200)
         if 'rsi' not in df.columns:
-            df['rsi'] = ta.rsi(df['close'], length=14)
+            df['rsi'] = _rsi(df['close'], length=14)
         if 'vol_avg' not in df.columns:
-            df['vol_avg'] = ta.sma(df['volume'], length=20)
+            df['vol_avg'] = _sma(df['volume'], length=20)
         if 'atr' not in df.columns:
-            df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+            df['atr'] = _atr(df['high'], df['low'], df['close'], length=14)
         
         # Helper for pivot detection
         if 'ph' not in df.columns:
@@ -77,11 +99,11 @@ class PatternsEngine:
         # 2. MTF Alignment (M15 & H1)
         mtf_score = 0
         if self.m15 is not None:
-            m15_ema = ta.ema(self.m15['close'], length=200).iloc[-1]
+            m15_ema = _ema(self.m15['close'], length=200).iloc[-1]
             if (is_bull and self.m15['close'].iloc[-1] > m15_ema) or (not is_bull and self.m15['close'].iloc[-1] < m15_ema):
                 mtf_score += 10
         if self.h1 is not None and len(self.h1) > 200:
-            h1_series = ta.ema(self.h1['close'], length=200)
+            h1_series = _ema(self.h1['close'], length=200)
             if h1_series is not None and not h1_series.empty:
                  h1_ema = h1_series.iloc[-1]
                  if (is_bull and self.h1['close'].iloc[-1] > h1_ema) or (not is_bull and self.h1['close'].iloc[-1] < h1_ema):

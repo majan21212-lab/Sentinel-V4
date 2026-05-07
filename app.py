@@ -15,6 +15,8 @@ import threading
 import state_manager as state
 import schedule
 from core.reporting import report_gen
+from telegram_bot import telegram_bot
+from ai.explainability_engine import explain_engine
 
 load_dotenv()
 
@@ -24,7 +26,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("tradebot.log", encoding="utf-8"),
+        logging.FileHandler("sentinel.log", encoding="utf-8"),
     ],
 )
 log = logging.getLogger(__name__)
@@ -70,21 +72,45 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         log.info("--- No valid pattern found for %s ---", symbol)
         return
 
-    # ML Validation
+    # 1. ML Validation - THE SENTINEL GATE
     ml = get_ml_validator()
     confidence = ml.predict_confidence(raw_signal)
-    if confidence < 0.45:
-        log.warning("[WARN] ML Check Failed for %s (Confidence: %.1f%%) - Trade Ignored", symbol, confidence * 100)
+    
+    # Add confidence to shared state for UI visibility
+    state.SHARED_DATA["last_ai_confidence"] = round(confidence * 100, 1)
+    
+    threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.80))
+    
+    if confidence < threshold:
+        log.warning("🛡️ AI SENTINEL REJECTED: %s (Confidence: %.1f%% < %.1f%%)", 
+                    symbol, confidence * 100, threshold * 100)
+        # Update dashboard status
+        state.SHARED_DATA["status"] = f"AI REJECTED {symbol}"
         return
 
     raw_signal["symbol"] = symbol
     log.info(
-        "[SIGNAL] PATTERN DETECTED: %s | Score: %s",
+        "[SIGNAL] PATTERN DETECTED & AI APPROVED: %s | Score: %s | Confidence: %.1f%%",
         raw_signal.get("pattern"),
         raw_signal.get("score"),
+        confidence * 100
     )
 
-    # 1. Save to Database
+    # 2. AI Rationale - THE EXPLAINABILITY LAYER
+    explain_report = await explain_engine.generate_rationale(Signal(
+        symbol=symbol,
+        direction=raw_signal["direction"],
+        entry=float(raw_signal["entry"]),
+        stop_loss=float(raw_signal["sl"]),
+        take_profit=float(raw_signal["tp1"]),
+        tp2=float(raw_signal.get("tp2")) if raw_signal.get("tp2") else None,
+        pattern=raw_signal.get("pattern", "JewelElite"),
+        reason=raw_signal.get("reason", "")
+    ))
+    
+    rationale_json = explain_report.json() if explain_report else "No rationale generated."
+
+    # 3. Save to Database
     signal_to_save = {
         "symbol":      symbol,
         "direction":   raw_signal["direction"],
@@ -95,7 +121,8 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         "pattern":     raw_signal["pattern"],
         "score":       raw_signal["score"],
         "ml_confidence": confidence,
-        "indicators_meta": f"Reason: {raw_signal['reason']}"
+        "indicators_meta": f"Reason: {raw_signal['reason']}",
+        "ai_rationale": rationale_json
     }
     
     from db_utils import get_db_connection
@@ -103,18 +130,18 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     if conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO signals (symbol, direction, entry_price, take_profit, stop_loss, timeframe, pattern, score, ml_confidence, indicators_meta)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO signals (symbol, direction, entry_price, take_profit, stop_loss, timeframe, pattern, score, ml_confidence, indicators_meta, ai_rationale)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             signal_to_save["symbol"], signal_to_save["direction"], signal_to_save["entry_price"],
             signal_to_save["take_profit"], signal_to_save["stop_loss"], signal_to_save["timeframe"],
             signal_to_save["pattern"], signal_to_save["score"], signal_to_save["ml_confidence"],
-            signal_to_save["indicators_meta"]
+            signal_to_save["indicators_meta"], signal_to_save["ai_rationale"]
         ))
         conn.commit()
         conn.close()
 
-    # 2. Add to Dashboard Feed
+    # 4. Add to Dashboard Feed
     state.SHARED_DATA["signals"].insert(0, {
         "symbol": symbol,
         "direction": raw_signal["direction"],
@@ -123,13 +150,13 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         "sl": raw_signal["sl"],
         "pattern": raw_signal["pattern"],
         "score": raw_signal["score"],
-        "ai_rationale": "SMC TECHNICAL FLOW",
+        "ai_rationale": explain_report.summary if explain_report else "SMC TECHNICAL FLOW",
         "created_at": datetime.now().strftime("%H:%M:%S")
     })
-    # Keep only the last 10 signals to save bandwidth
+    # Keep only the last 10 signals
     state.SHARED_DATA["signals"] = state.SHARED_DATA["signals"][:10]
 
-    # 3. Automated Execution
+    # 4. Automated Execution
     if not state.SHARED_DATA.get("is_bot_active", False):
         log.info("--- Core Engine is OFF. Skipping execution for %s ---", symbol)
         return
@@ -158,6 +185,9 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     if res and res.get("status") == "success":
         log.info("✅ Trade Executed Successfully on %s", BROKER_TYPE)
         
+        # Send Telegram Notification
+        telegram_bot.send_signal_alert(signal_to_save)
+        
         # Record trade for dashboard visibility
         trade_record = {
             "symbol": signal.symbol,
@@ -179,7 +209,7 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         log.error("❌ Execution Failed on %s: %s", BROKER_TYPE, msg)
 
 
-def run_god_mode(symbol: str, df=None) -> None:
+async def run_god_mode(symbol: str, df=None) -> None:
     """
     Runs the God-Mode (14-Factor) strategy scanner for one symbol.
     """
@@ -211,7 +241,30 @@ def run_god_mode(symbol: str, df=None) -> None:
     # 3. Save to Database
     save_signal(raw_signal)
 
-    # 4. Automated Execution
+    # 4. ML Validation - THE SENTINEL GATE
+    ml = get_ml_validator()
+    confidence = ml.predict_confidence(raw_signal)
+    state.SHARED_DATA["last_ai_confidence"] = round(confidence * 100, 1)
+    threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.85))
+    
+    if confidence < threshold:
+        log.warning("🛡️ AI SENTINEL REJECTED GOD-MODE: %s (Confidence: %.1f%%)", 
+                    symbol, confidence * 100)
+        state.SHARED_DATA["status"] = f"AI REJECTED {symbol}"
+        return
+
+    # 5. AI Rationale - THE EXPLAINABILITY LAYER
+    explain_report = await explain_engine.generate_rationale(Signal(
+        symbol=symbol,
+        direction=raw_signal["type"],
+        entry=float(raw_signal["entry"]),
+        stop_loss=float(raw_signal["stop_loss"]),
+        take_profit=float(raw_signal["take_profit"]),
+        pattern="GodMode",
+        reason=raw_signal.get("reason", "")
+    ))
+    
+    # 6. Automated Execution
     if not state.SHARED_DATA.get("is_bot_active", False):
         log.info("--- Core Engine is OFF. Skipping execution for %s ---", symbol)
         return
@@ -227,6 +280,7 @@ def run_god_mode(symbol: str, df=None) -> None:
             score=float(raw_signal.get("score", 0.0)),
             pattern="GodMode",
             reason=raw_signal.get("reason", ""),
+            explainability=explain_report
         )
     except Exception as exc:
         log.error("❌ Failed to build Signal model from God-Mode data: %s", exc)
@@ -235,6 +289,9 @@ def run_god_mode(symbol: str, df=None) -> None:
     res = get_executor().place_trade(signal, platform=BROKER_TYPE)
     if res and res.get("status") == "success":
         log.info("✅ God-Mode Trade Executed Successfully on %s", BROKER_TYPE)
+        
+        # Send Telegram Notification
+        telegram_bot.send_signal_alert(raw_signal)
         
         # Record trade for dashboard visibility
         trade_record = {
@@ -332,11 +389,15 @@ async def process_candle(symbol: str, df) -> None:
         state.SHARED_DATA["status"] = "ONLINE"
         update_pnl()
 
-    # Strategy Execution
-    if STRATEGY_MODE == "JEWEL_ELITE":
+    # Strategy Execution - DYNAMIC MODE
+    if not state.SHARED_DATA.get("is_bot_active", False):
+        return
+
+    mode = state.SHARED_DATA.get("strategy_mode", STRATEGY_MODE)
+    if mode == "JEWEL_ELITE":
         await run_jewel_elite(symbol, df)
-    elif STRATEGY_MODE == "GOD_MODE":
-        run_god_mode(symbol, df)
+    elif mode == "GOD_MODE":
+        await run_god_mode(symbol, df)
     else:
         run_strategy(symbol, df)
 
@@ -442,6 +503,42 @@ async def pnl_update_loop():
                 # Calculate PnL manually for UI responsiveness
                 pnl = p.profit + p.swap
                 
+                # --- [SMART TRAILING MONITOR] ---
+                if executor.risk_engine.config.enable_trailing_stop:
+                    is_long = p.type == mt5.POSITION_TYPE_BUY
+                    entry = p.price_open
+                    curr = p.price_current
+                    current_sl = p.sl
+                    tp = p.tp
+                    
+                    # Logic: Only trail if we are in profit
+                    in_profit = (curr > entry) if is_long else (curr < entry)
+                    
+                    if in_profit and tp > 0:
+                        total_dist = abs(tp - entry)
+                        prog_dist = abs(curr - entry)
+                        progress = prog_dist / total_dist if total_dist > 0 else 0
+                        
+                        # 1. Break-Even Activation (at 50% progress)
+                        activation = executor.risk_engine.config.trailing_stop_activation_pct
+                        if progress >= activation:
+                            be_level = entry + (0.0001 if is_long else -0.0001) # tiny buffer
+                            # Only move if we haven't moved past BE yet
+                            if (is_long and current_sl < be_level) or (not is_long and (current_sl > be_level or current_sl == 0)):
+                                log.info(f"🛡️ Smart Trailing: Moving Ticket {p.ticket} to Break-Even (+50% goal hit)")
+                                adapter.modify_order(p.ticket, be_level, tp)
+                        
+                        # 2. Continuous Trailing (Once past 75% progress or fixed distance)
+                        dist_pct = executor.risk_engine.config.trailing_stop_distance_pct / 100
+                        trail_price = curr * (1 - dist_pct) if is_long else curr * (1 + dist_pct)
+                        
+                        if (is_long and trail_price > current_sl) or (not is_long and (trail_price < current_sl or current_sl == 0)):
+                            # Ensure we don't move SL too close (min 50 points)
+                            if abs(trail_price - curr) > (curr * 0.0005):
+                                log.info(f"🎢 Smart Trailing: Ratcheting Ticket {p.ticket} SL to {trail_price:.5f}")
+                                adapter.modify_order(p.ticket, trail_price, tp)
+                # -------------------------------
+
                 # Check if we already have this trade recorded (to keep our custom metadata like 'time')
                 if ticket_id in existing_active:
                     trade = existing_active[ticket_id]
@@ -477,12 +574,77 @@ async def pnl_update_loop():
             state.SHARED_DATA["active_trades"] = current_active
             state.SHARED_DATA["trade_history"] = history[:50]
             
+            # 5. Periodically Save Equity Snapshot (Every 100 loops ~ 3 mins)
+            if not hasattr(pnl_update_loop, "counter"): pnl_update_loop.counter = 0
+            pnl_update_loop.counter += 1
+            if pnl_update_loop.counter >= 100:
+                pnl_update_loop.counter = 0
+                equity = state.SHARED_DATA.get("equity", state.SHARED_DATA.get("balance", 0))
+                try:
+                    from db_utils import get_db_connection
+                    conn = get_db_connection()
+                    if conn:
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO equity_history (total_equity) VALUES (?)", (equity,))
+                        conn.commit()
+                        conn.close()
+                except Exception as e:
+                    log.error(f"Equity Log Error: {e}")
+
             # Broadcast update by saving state
             state.save_shared_state(state.SHARED_DATA)
 
         except Exception as e:
             log.error("PnL/Sync Loop Error: %s", e)
         await asyncio.sleep(2)
+
+async def failsafe_monitor_loop():
+    """
+    Sentinel Heartbeat & Drawdown Guard.
+    Pings brokers and monitors account health to trigger emergency lockdown if needed.
+    """
+    log.info("🛡️ Sentinel Fail-Safe Monitor Active (Heartbeat: 15s)")
+    executor = get_executor()
+    
+    while True:
+        try:
+            # 1. Connectivity Heartbeat
+            active_platform = os.getenv("DEFAULT_BROKER", "MT5").lower()
+            adapter = executor.adapters.get(active_platform)
+            
+            if adapter:
+                if not adapter.is_connected():
+                    log.error(f"🚨 HEARTBEAT LOST: Connection to {active_platform.upper()} failed. Attempting recovery...")
+                    telegram_bot.send_message(f"⚠️ *SENTINEL ALERT: Connection Lost*\nBroker: {active_platform.upper()}\nAttempting auto-recovery...")
+                    executor.reconnect_all()
+                else:
+                    # Connection is fine
+                    pass
+            
+            # 2. Hard Drawdown Guard
+            equity = state.SHARED_DATA.get("equity", 0)
+            if equity > 0:
+                is_safe, msg = executor.risk_engine.validate_drawdown(equity)
+                if not is_safe:
+                    log.critical(f"🚨 {msg}")
+                    # EMERGENCY LOCKDOWN
+                    state.SHARED_DATA["kill_switch"] = True
+                    state.SHARED_DATA["is_bot_active"] = False
+                    state.SHARED_DATA["status"] = "LOCKDOWN"
+                    
+                    # Liquidate All
+                    executor.close_all()
+                    
+                    telegram_bot.send_message(f"🚨 *SENTINEL EMERGENCY LOCKDOWN*\n{msg}\nAll positions liquidated. Trading halted.")
+                    state.save_shared_state(state.SHARED_DATA)
+                    
+                    # Stop loop if in lockdown (requires manual reset)
+                    break 
+
+        except Exception as e:
+            log.error(f"Failsafe Monitor Error: {e}")
+        
+        await asyncio.sleep(15) 
 
 async def main_loop() -> None:
     log.info("========================================")
@@ -521,6 +683,8 @@ async def main_loop() -> None:
         try:
             state.SHARED_DATA["status"] = "ONLINE"
             asyncio.create_task(pnl_update_loop())
+            asyncio.create_task(telegram_bot.poll_commands())
+            asyncio.create_task(failsafe_monitor_loop())
             await mt5_polling_loop(symbols, timeframe_str="5m")
         except KeyboardInterrupt:
             log.info("Shutting down...")
@@ -530,6 +694,8 @@ async def main_loop() -> None:
         # Default: Use Binance WebSockets via FeedHandler
         feed = FeedHandler(callback=process_candle, timeframe="5m")
         try:
+            asyncio.create_task(telegram_bot.poll_commands())
+            asyncio.create_task(failsafe_monitor_loop())
             await feed.start(symbols)
         except KeyboardInterrupt:
             log.info("Shutting down...")

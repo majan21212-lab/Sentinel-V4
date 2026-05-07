@@ -1,468 +1,165 @@
 {
     "prices": {
-        "XAUUSDm": 4678.775,
-        "BTCUSDm": 76749.74,
-        "EURUSDm": 1.17234,
-        "GBPUSDm": 1.3535
+        "XAUUSDm": 4702.855,
+        "EURUSDm": 1.1685,
+        "BTCUSDm": 80888.51,
+        "ETHUSDm": 2381.92,
+        "XRPUSDm": 1.39907,
+        "GBPUSDm": 1.35226,
+        "US30m": 49045.8
     },
     "status": "ONLINE",
     "signals": [
         {
             "symbol": "XAUUSDm",
-            "direction": "SHORT",
-            "entry": 4678.324,
-            "tp": 4673.080578682398,
-            "sl": 4683.567421317602,
-            "pattern": "TRIANGLE_BD",
+            "direction": "LONG",
+            "entry": 4692.314,
+            "tp": 4699.084714285715,
+            "sl": 4685.543285714286,
+            "pattern": "FVG_BULL",
             "score": 80.0,
             "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:40:55"
+            "created_at": "05:46:09"
         },
         {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76581.87,
-            "tp": 76353.69055370335,
-            "sl": 76810.04944629665,
-            "pattern": "TRIANGLE_BD",
-            "score": 85.0,
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4698.672,
+            "tp": 4705.1777142857145,
+            "sl": 4692.166285714285,
+            "pattern": "FVG_BULL",
+            "score": 70.0,
             "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:39:52"
+            "created_at": "00:13:54"
         },
         {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76585.82,
-            "tp": 76364.9476965605,
-            "sl": 76806.69230343951,
-            "pattern": "TRIANGLE_BD",
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4698.653,
+            "tp": 4705.146571428572,
+            "sl": 4692.159428571428,
+            "pattern": "FVG_BULL",
+            "score": 70.0,
+            "ai_rationale": "SMC TECHNICAL FLOW",
+            "created_at": "00:12:42"
+        },
+        {
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4698.112,
+            "tp": 4704.500714285715,
+            "sl": 4691.723285714285,
+            "pattern": "FVG_BULL",
+            "score": 70.0,
+            "ai_rationale": "SMC TECHNICAL FLOW",
+            "created_at": "00:11:42"
+        },
+        {
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4696.466,
+            "tp": 4702.625142857143,
+            "sl": 4690.306857142858,
+            "pattern": "FVG_BULL",
             "score": 80.0,
             "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:37:47"
+            "created_at": "00:10:41"
         },
         {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76562.76,
-            "tp": 76342.69055370335,
-            "sl": 76782.82944629664,
-            "pattern": "TRIANGLE_BD",
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4696.1,
+            "tp": 4703.096571428572,
+            "sl": 4689.103428571429,
+            "pattern": "FVG_BULL",
+            "score": 70.0,
+            "ai_rationale": "SMC TECHNICAL FLOW",
+            "created_at": "00:09:37"
+        },
+        {
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4696.003,
+            "tp": 4702.9995714285715,
+            "sl": 4689.006428571428,
+            "pattern": "FVG_BULL",
+            "score": 70.0,
+            "ai_rationale": "SMC TECHNICAL FLOW",
+            "created_at": "00:08:33"
+        },
+        {
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4696.43,
+            "tp": 4703.426571428572,
+            "sl": 4689.4334285714285,
+            "pattern": "FVG_BULL",
+            "score": 70.0,
+            "ai_rationale": "SMC TECHNICAL FLOW",
+            "created_at": "00:07:32"
+        },
+        {
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4695.398,
+            "tp": 4702.1981428571435,
+            "sl": 4688.597857142857,
+            "pattern": "FVG_BULL",
             "score": 80.0,
             "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:36:43"
+            "created_at": "00:06:26"
         },
         {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76581.06,
-            "tp": 76365.91626798906,
-            "sl": 76796.20373201094,
-            "pattern": "TRIANGLE_BD",
+            "symbol": "XAUUSDm",
+            "direction": "LONG",
+            "entry": 4695.768,
+            "tp": 4702.495714285715,
+            "sl": 4689.040285714285,
+            "pattern": "FVG_BULL",
             "score": 80.0,
             "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:35:40"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76577.32,
-            "tp": 76349.34521168053,
-            "sl": 76805.29478831949,
-            "pattern": "TRIANGLE_BD",
-            "score": 85.0,
-            "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:34:37"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76569.9,
-            "tp": 76341.92521168051,
-            "sl": 76797.87478831947,
-            "pattern": "TRIANGLE_BD",
-            "score": 85.0,
-            "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:33:34"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76624.18,
-            "tp": 76396.20521168051,
-            "sl": 76852.15478831947,
-            "pattern": "TRIANGLE_BD",
-            "score": 85.0,
-            "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:32:30"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76559.71,
-            "tp": 76333.19092596625,
-            "sl": 76786.22907403376,
-            "pattern": "TRIANGLE_BD",
-            "score": 85.0,
-            "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:31:27"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76618.81,
-            "tp": 76417.23092596624,
-            "sl": 76820.38907403375,
-            "pattern": "TRIANGLE_BD",
-            "score": 80.0,
-            "ai_rationale": "SMC TECHNICAL FLOW",
-            "created_at": "23:30:24"
+            "created_at": "00:05:20"
         }
     ],
     "auto_trade": true,
     "demo_mode": false,
     "active_profile": "CONSERVATIVE",
-    "strategy_mode": "PATTERN",
-    "active_trades": [
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76581.87,
-            "tp": 76353.69055370335,
-            "sl": 76810.04944629665,
-            "qty": 0.01,
-            "pnl": -1.68,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:39:53"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76585.82,
-            "tp": 76364.9476965605,
-            "sl": 76806.69230343951,
-            "qty": 0.01,
-            "pnl": -1.64,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:37:48"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76562.76,
-            "tp": 76342.69055370335,
-            "sl": 76782.82944629664,
-            "qty": 0.01,
-            "pnl": -1.87,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:36:45"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76581.06,
-            "tp": 76365.91626798906,
-            "sl": 76796.20373201094,
-            "qty": 0.01,
-            "pnl": -1.69,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:35:42"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76577.32,
-            "tp": 76349.34521168053,
-            "sl": 76805.29478831949,
-            "qty": 0.01,
-            "pnl": -1.72,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:34:38"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76569.9,
-            "tp": 76341.92521168051,
-            "sl": 76797.87478831947,
-            "qty": 0.01,
-            "pnl": -1.8,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:33:35"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76624.18,
-            "tp": 76396.20521168051,
-            "sl": 76852.15478831947,
-            "qty": 0.01,
-            "pnl": -1.26,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:32:32"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76559.71,
-            "tp": 76333.19092596625,
-            "sl": 76786.22907403376,
-            "qty": 0.01,
-            "pnl": -1.9,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:31:28"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76618.81,
-            "tp": 76417.23092596624,
-            "sl": 76820.38907403375,
-            "qty": 0.01,
-            "pnl": -1.31,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:30:25"
-        },
-        {
-            "symbol": "XAUUSDm",
-            "direction": "SHORT",
-            "entry": 4681.853,
-            "tp": 4676.813792859044,
-            "sl": 4686.892207140956,
-            "qty": 0.01,
-            "pnl": 3.08,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:30:23"
-        },
-        {
-            "symbol": "XAUUSDm",
-            "direction": "SHORT",
-            "entry": 4680.107,
-            "tp": 4674.33307203143,
-            "sl": 4685.88092796857,
-            "qty": 0.01,
-            "pnl": 1.33,
-            "status": "ACTIVE",
-            "time": "2026-04-27 23:05:39"
-        }
-    ],
+    "strategy_mode": "JEWEL_ELITE",
+    "active_trades": [],
     "pending_orders": [],
     "trade_history": [
         {
+            "ticket": 1207527201,
             "symbol": "XAUUSDm",
-            "direction": "SHORT",
-            "entry": 4683.607,
-            "tp": 4677.40306040267,
-            "sl": 4689.81093959733,
-            "qty": 0.01,
-            "pnl": 6.74,
+            "direction": "LONG",
+            "entry": 4687.9130000000005,
+            "tp": 4704.661,
+            "sl": 4681.149,
+            "qty": 0.03,
+            "pnl": 13.2,
             "status": "CLOSED",
-            "time": "2026-04-27 22:40:32"
+            "time": "2026-05-06 22:16:02",
+            "current_price": 4692.382,
+            "closed_at": "2026-05-07 05:46:09"
         },
         {
+            "ticket": 1207527195,
             "symbol": "XAUUSDm",
-            "direction": "SHORT",
-            "entry": 4683.614,
-            "tp": 4677.864556066882,
-            "sl": 4689.363443933117,
-            "qty": 0.01,
-            "pnl": 6.05,
+            "direction": "LONG",
+            "entry": 4687.9130000000005,
+            "tp": 4692.905,
+            "sl": 4681.149,
+            "qty": 0.03,
+            "pnl": 13.57,
             "status": "CLOSED",
-            "time": "2026-04-27"trade_his
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76716.16,
-            "tp": 76480.07552936015,
-            "sl": 76952.24447063985,
-            "qty": 0.01,
-            "pnl": 2.62,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:37:21"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76715.1,
-            "tp": 76479.01552936016,
-            "sl": 76951.18447063986,
-            "qty": 0.01,
-            "pnl": 2.6,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:38:26"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76729.9,
-            "tp": 76493.81552936014,
-            "sl": 76965.98447063984,
-            "qty": 0.01,
-            "pnl": 2.43,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:39:29"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76708.56,
-            "tp": 76487.44442012014,
-            "sl": 76929.67557987985,
-            "qty": 0.01,
-            "pnl": 2.22,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:40:34"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76714.55,
-            "tp": 76489.68584869157,
-            "sl": 76939.41415130843,
-            "qty": 0.01,
-            "pnl": 2.28,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:41:37"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76720.81,
-            "tp": 76494.62156297728,
-            "sl": 76946.99843702272,
-            "qty": 0.01,
-            "pnl": 2.34,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:42:40"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76716.96,
-            "tp": 76490.77156297729,
-            "sl": 76943.14843702273,
-            "qty": 0.01,
-            "pnl": 2.3,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:43:43"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76740.03,
-            "tp": 76513.81870583442,
-            "sl": 76966.24129416558,
-            "qty": 0.01,
-            "pnl": 2.53,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:44:47"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76748.73,
-            "tp": 76531.56890031564,
-            "sl": 76965.89109968435,
-            "qty": 0.01,
-            "pnl": 2.62,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:45:50"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76819.52,
-            "tp": 76603.17377478289,
-            "sl": 77035.86622521712,
-            "qty": 0.01,
-            "pnl": 2.55,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:51:00"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76820.67,
-            "tp": 76605.51360719635,
-            "sl": 77035.82639280365,
-            "qty": 0.01,
-            "pnl": 2.56,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:58:24"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76771.38,
-            "tp": 76570.2695169922,
-            "sl": 76972.49048300782,
-            "qty": 0.01,
-            "pnl": 2.06,
-            "status": "CLOSED",
-            "time": "2026-04-27 23:05:41"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76852.0,
-            "tp": 76631.01377478288,
-            "sl": 77072.98622521712,
-            "qty": 0.01,
-            "pnl": 2.32,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:52:04"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76844.41,
-            "tp": 76634.29932148207,
-            "sl": 77054.52067851793,
-            "qty": 0.01,
-            "pnl": 2.25,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:55:13"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76843.51,
-            "tp": 76630.75360719636,
-            "sl": 77056.26639280363,
-            "qty": 0.01,
-            "pnl": 2.24,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:56:17"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76848.76,
-            "tp": 76636.00360719636,
-            "sl": 77061.51639280363,
-            "qty": 0.01,
-            "pnl": 2.29,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:57:20"
-        },
-        {
-            "symbol": "BTCUSDm",
-            "direction": "SHORT",
-            "entry": 76836.6,
-            "tp": 76621.32217862493,
-            "sl": 77051.87782137508,
-            "qty": 0.01,
-            "pnl": 2.17,
-            "status": "CLOSED",
-            "time": "2026-04-27 22:59:27"
+            "time": "2026-05-06 22:16:02",
+            "current_price": 4692.435,
+            "closed_at": "2026-05-06 23:07:33"
         }
     ],
     "active_markets": [
         "XAUUSDm",
-        "BTCUSDm",
-        "EURUSDm",
-        "GBPUSDm",
-        "NAS100m"
+        "xauusdm"
     ],
     "market_configs": {
         "XAUUSDm": {
@@ -473,7 +170,11 @@
             "enabled": true,
             "strategy": "JEWEL_ELITE"
         },
-        "EURUSDm": {
+        "ETHUSDm": {
+            "enabled": true,
+            "strategy": "JEWEL_ELITE"
+        },
+        "XRPUSDm": {
             "enabled": true,
             "strategy": "JEWEL_ELITE"
         },
@@ -481,14 +182,18 @@
             "enabled": true,
             "strategy": "JEWEL_ELITE"
         },
-        "NAS100m": {
+        "EURUSDm": {
+            "enabled": true,
+            "strategy": "JEWEL_ELITE"
+        },
+        "US30m": {
             "enabled": true,
             "strategy": "JEWEL_ELITE"
         }
     },
     "is_bot_active": true,
     "kill_switch": false,
-    "demo_balance": 0,
+    "demo_balance": 8211.47,
     "execution_bias": "TREND",
     "risk_config": {
         "active_profile": "CONSERVATIVE",
@@ -506,9 +211,11 @@
             "BTCUSDm"
         ],
         "min_multiplier": 0.1,
-        "max_multiplier": 2.0
+        "max_multiplier": 2.0,
+        "max_account_drawdown_pct": 15.0
     },
     "analytics": {},
-    "balance": 187.98,
-    "equity": 136.48
+    "balance": 8276.69,
+    "equity": 8276.69,
+    "last_ai_confidence": 65.4
 }

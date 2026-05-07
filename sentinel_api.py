@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from models import Signal, AccountStatus, RiskConfig
 from execution_layer import ExecutionLayer
 from db_utils import setup_database
+import state_manager as state
 
 load_dotenv()
 
@@ -48,10 +49,11 @@ async def root():
 @app.get("/status", dependencies=[Depends(verify_token)])
 async def get_status():
     """Returns the operational status of the bot and configured brokers."""
+    current_state = state.load_shared_state()
     return {
-        "strategy": os.getenv("STRATEGY_MODE"),
+        "strategy": current_state.get("strategy_mode") or os.getenv("STRATEGY_MODE"),
         "active_adapters": list(executor.adapters.keys()),
-        "auto_trade": os.getenv("AUTO_TRADE_ENABLED") == "true"
+        "auto_trade": current_state.get("is_bot_active", False) or current_state.get("auto_trade", False)
     }
 
 @app.get("/account", dependencies=[Depends(verify_token)])
@@ -114,4 +116,4 @@ async def manual_trade(signal: Signal, platform: Optional[str] = None):
 if __name__ == "__main__":
     import uvicorn
     setup_database()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

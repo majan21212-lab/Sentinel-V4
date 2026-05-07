@@ -43,7 +43,11 @@ class BaseExchangeAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_balance(self):
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict:
+        pass
+
+    @abstractmethod
+    def get_balance(self) -> dict:
         pass
 
     @abstractmethod
@@ -60,6 +64,11 @@ class BaseExchangeAdapter(ABC):
 
     @abstractmethod
     def close_symbol_positions(self, symbol: str) -> dict:
+        pass
+
+    @abstractmethod
+    def is_connected(self) -> bool:
+        """Checks if the connection to the exchange/broker is active."""
         pass
 
 
@@ -154,6 +163,13 @@ class BinanceAdapter(BaseExchangeAdapter):
             log.error("Binance close_all error: %s", exc)
             return {"status": "error", "message": str(exc)}
 
+    def is_connected(self) -> bool:
+        try:
+            self.exchange.fetch_status()
+            return True
+        except:
+            return False
+
 
 # ── Alpaca Adapter ────────────────────────────────────────────────────────────
 
@@ -230,6 +246,23 @@ class AlpacaAdapter(BaseExchangeAdapter):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    def close_all_positions(self) -> dict:
+        try:
+            self.api.close_all_positions()
+            return {"status": "success", "exchange": "alpaca"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict:
+        return {"status": "error", "message": "Alpaca modification not implemented yet"}
+
+    def is_connected(self) -> bool:
+        try:
+            self.api.get_account()
+            return True
+        except:
+            return False
+
 
 # ── MT5 Adapter ───────────────────────────────────────────────────────────────
 
@@ -250,8 +283,15 @@ class MT5Adapter(BaseExchangeAdapter):
     def __init__(self):
         if _MT5_DISABLED or mt5 is None:
             raise RuntimeError("MT5Adapter is disabled (MT5_DISABLED=true or MetaTrader5 not installed).")
-        if not mt5.initialize():
+        
+        terminal_path = os.getenv("MT5_TERMINAL_PATH")
+        init_args = {}
+        if terminal_path:
+            init_args["path"] = terminal_path
+            
+        if not mt5.initialize(**init_args):
             error = mt5.last_error()
+            log.error(f"MT5 initialisation failed: {error}")
             raise RuntimeError(f"MT5 initialisation failed: {error}")
 
         # Resolve filling constants now that mt5 is live
@@ -334,6 +374,28 @@ class MT5Adapter(BaseExchangeAdapter):
             return {"status": "partial_success", "exchange": "mt5", "details": results}
         else:
             return {"status": "error", "exchange": "mt5", "message": results[0].get("message", "All orders failed"), "details": results}
+
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict:
+        """Modifies an existing MT5 position's SL and TP."""
+        # Find position by ticket
+        position = mt5.positions_get(ticket=int(ticket))
+        if not position:
+            return {"status": "error", "message": f"Position {ticket} not found"}
+        
+        pos = position[0]
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": pos.ticket,
+            "symbol": pos.symbol,
+            "sl": float(new_sl),
+            "tp": float(new_tp),
+        }
+        
+        result = mt5.order_send(request)
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            return {"status": "error", "message": f"MT5 modification failed: {result.comment}"}
+        
+        return {"status": "success", "ticket": ticket}
 
     def get_balance(self) -> dict:
         info = mt5.account_info()
@@ -435,6 +497,10 @@ class MT5Adapter(BaseExchangeAdapter):
         
         return {"status": "success", "closed_count": count}
 
+    def is_connected(self) -> bool:
+        if _MT5_DISABLED or mt5 is None: return False
+        return mt5.terminal_info() is not None
+
 
 # ── Execution Layer ───────────────────────────────────────────────────────────
 
@@ -447,6 +513,11 @@ class ExecutionLayer:
     def __init__(self):
         self.adapters:     dict[str, BaseExchangeAdapter] = {}
         self.risk_engine = RiskEngine()
+        self._init_adapters()
+
+    def reconnect_all(self):
+        """Attempts to re-initialise all inactive or disconnected adapters."""
+        log.info("🔄 Sentinel Reconnect Triggered: Re-scanning broker endpoints...")
         self._init_adapters()
 
     def _init_adapters(self):
@@ -486,6 +557,10 @@ class ExecutionLayer:
             log.error(msg)
             return {"status": "error", "message": msg}
 
+        import state_manager as state
+        if state.SHARED_DATA.get("kill_switch"):
+            return {"status": "rejected", "message": "GLOBAL KILL SWITCH ACTIVE: System is in lockdown."}
+
         try:
             # ── 1. Fetch live account equity ──────────────────────────────
             raw_balance = self.adapters[target].get_balance()
@@ -506,7 +581,7 @@ class ExecutionLayer:
                 open_positions=(
                     getattr(raw_balance, "open_positions", 0)
                     if target == "alpaca"
-                    else raw_balance.get("positions", 0)
+                    else len(mt5.positions_get()) if target == "mt5" and mt5.positions_get() is not None else 0
                     if target == "mt5"
                     else 0
                 ),
@@ -546,6 +621,7 @@ class ExecutionLayer:
                 notifier.send_message(
                     f"🚀 *Executed: {signal.symbol}*\n"
                     f"• {signal.direction} @ {signal.entry}\n"
+                    f"• SL: {signal.sl} | TP: {signal.tp}\n"
                     f"• Size: {signal.qty}"
                 )
             return res

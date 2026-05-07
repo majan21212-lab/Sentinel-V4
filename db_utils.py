@@ -45,6 +45,7 @@ def setup_database():
                 outcome INTEGER DEFAULT 0, -- 1=Win, -1=Loss, 0=Pending
                 ml_confidence REAL,
                 indicators_meta TEXT,
+                ai_rationale TEXT, -- JSON block for AI Explainability
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
@@ -71,6 +72,19 @@ def setup_database():
             cursor.execute(create_table_query)
             cursor.execute(create_history_query)
             cursor.execute(create_transactions_query)
+            
+            # --- Migrations (Ensure columns exist in older databases) ---
+            cursor.execute("PRAGMA table_info(signals)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            if 'ai_rationale' not in columns:
+                print("Migration: Adding missing column 'ai_rationale' to signals table...")
+                cursor.execute("ALTER TABLE signals ADD COLUMN ai_rationale TEXT")
+            
+            if 'indicators_meta' not in columns:
+                print("Migration: Adding missing column 'indicators_meta' to signals table...")
+                cursor.execute("ALTER TABLE signals ADD COLUMN indicators_meta TEXT")
+
             conn.commit()
             print("Database tables check/creation successful using SQLite.")
             

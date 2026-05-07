@@ -5,6 +5,9 @@ from models import RiskConfig, AccountStatus, Signal
 class RiskEngine:
     def __init__(self, config: RiskConfig = RiskConfig()):
         self.config = config
+        self.peak_equity = 0.0
+        self.base_equity = 0.0
+        self.locked_profit = 0.0
         self.load_config()
 
     def load_config(self):
@@ -48,6 +51,10 @@ class RiskEngine:
         if account.daily_pnl < -max_loss_usd and max_loss_usd > 0:
             return False, f"Passive Stop: Daily loss limit reached (${max_loss_usd:.2f})."
 
+        # 3b. Dynamic Profit Lock Check (Trailing Floor)
+        # We don't block trades here, but we ensure the floor is respected.
+        # Logic is handled in validate_drawdown() which is called by the failsafe loop.
+
         # 4. Check Minimum Order Value
         # For MT5, we must multiply by contract size to get real face value.
         multiplier = 1.0
@@ -79,6 +86,57 @@ class RiskEngine:
                     return False, f"Correlation Risk: Highly correlated asset(s) {list(active_correlated)} already open."
 
         return True, "Risk validation passed."
+
+    def validate_drawdown(self, current_equity: float) -> tuple[bool, str]:
+        """Checks for account-level hard stop based on peak drawdown AND Trailing Profit Lock."""
+        
+        # Initialize base equity if not set
+        if self.base_equity <= 0:
+            self.base_equity = current_equity
+            self.peak_equity = current_equity
+            return True, "Initial baseline established."
+
+        # 1. Update Peak for standard % drawdown checks
+        if current_equity > self.peak_equity:
+            self.peak_equity = current_equity
+
+        # 2. Dynamic Profit Lock (Fortress Scale System)
+        if self.config.enable_profit_lock:
+            current_profit = current_equity - self.base_equity
+            new_lock_level = 0
+            
+            # --- Tiered Milestone Logic ---
+            if current_profit >= 1000:
+                # 1k+ Tier: Lock in blocks of $1000
+                new_lock_level = (current_profit // 1000) * 1000
+            elif current_profit >= 800:
+                new_lock_level = 800
+            elif current_profit >= 500:
+                new_lock_level = 500
+            elif current_profit >= 200:
+                new_lock_level = 200
+            else:
+                # Early Tier: Lock in blocks of $50
+                new_lock_level = (current_profit // self.config.profit_lock_step_usd) * self.config.profit_lock_step_usd
+            
+            # Ensure we only move the lock UPWARD
+            if new_lock_level > self.locked_profit:
+                self.locked_profit = new_lock_level
+                import logging
+                logging.warning(f"🏦 FORTRESS MILESTONE REACHED: Profit locked at +${self.locked_profit:.2f}. This is now your permanent floor.")
+            
+            # Check against the Hard Floor
+            hard_floor = self.base_equity + self.locked_profit
+            
+            if current_equity < hard_floor:
+                return False, f"HARD STOP: Fortress Floor Violation. Equity ${current_equity:.2f} fell below locked floor ${hard_floor:.2f}."
+
+        # 3. Standard Percentage Drawdown from Peak (Secondary Safety)
+        drawdown_pct = ((self.peak_equity - current_equity) / self.peak_equity) * 100
+        if drawdown_pct >= self.config.max_account_drawdown_pct:
+            return False, f"HARD STOP: Max Peak Drawdown reached ({drawdown_pct:.1f}%)."
+            
+        return True, f"Risk Nominal. Floor: +${self.locked_profit:.2f} | Max DD: {drawdown_pct:.1f}%"
 
     def _calculate_multiplier(self, score: float) -> float:
         """Calculates risk multiplier based on score (70-100)."""

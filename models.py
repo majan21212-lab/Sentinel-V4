@@ -16,6 +16,14 @@ class RiskProfile(str, Enum):
     OPTIMAL = "OPTIMAL"
     AGGRESSIVE = "AGGRESSIVE"
 
+class ExplainabilityReport(BaseModel):
+    summary: str
+    key_factors: list[str]
+    liquidity_analysis: Optional[str] = None
+    market_structure: Optional[str] = None
+    ai_confidence_score: float
+    timestamp: datetime = Field(default_factory=datetime.now)
+
 class Signal(BaseModel):
     symbol: str
     direction: Direction
@@ -27,6 +35,7 @@ class Signal(BaseModel):
     score: float = 0.0
     pattern: Optional[str] = "GodMode"
     reason: Optional[str] = ""
+    explainability: Optional[ExplainabilityReport] = None
     timestamp: datetime = Field(default_factory=datetime.now)
 
     class Config:
@@ -55,6 +64,13 @@ class RiskConfig(BaseModel):
     ai_scaling_symbols: list[str] = Field(default_factory=list) # Symbols to apply scaling to
     min_multiplier: float = 0.5
     max_multiplier: float = 1.5
+    max_account_drawdown_pct: float = 15.0 # Max drawdown from peak before lockdown
+    daily_profit_target_usd: float = 50.0  # Mission target
+    enable_profit_lock: bool = True       # Trailing floor enabled
+    profit_lock_step_usd: float = 50.0    # Lock in every $50
+    enable_trailing_stop: bool = True    # Smart Trailing for individual trades
+    trailing_stop_activation_pct: float = 0.5 # Activate at 50% of the way to TP1
+    trailing_stop_distance_pct: float = 0.3   # Trail distance from current price
 
 class AccountStatus(BaseModel):
     platform: str
