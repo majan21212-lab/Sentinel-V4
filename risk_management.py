@@ -85,6 +85,15 @@ class RiskEngine:
                 if active_correlated and signal.symbol not in active_correlated:
                     return False, f"Correlation Risk: Highly correlated asset(s) {list(active_correlated)} already open."
 
+        # 6. Strict AI Confidence Filter
+        # Reject if AI confidence is provided and falls below the 85.0 threshold
+        confidence = signal.score
+        if hasattr(signal, 'explainability') and signal.explainability is not None:
+            confidence = signal.explainability.ai_confidence_score
+            
+        if confidence > 0 and confidence < 85.0:
+            return False, f"Strict Filter: AI Confidence ({confidence:.1f}) is below the minimum 85.0 threshold."
+
         return True, "Risk validation passed."
 
     def validate_drawdown(self, current_equity: float) -> tuple[bool, str]:

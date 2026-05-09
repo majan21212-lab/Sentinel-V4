@@ -79,8 +79,10 @@ class Dashboard {
         };
     }
 
-    updateState(data) {
-        this.state = { ...this.state, ...data };
+    updateState(payload) {
+        // Extract nested data if it follows the FLEET_UPDATE structure
+        const newState = payload.type === 'FLEET_UPDATE' ? payload.data : payload;
+        this.state = { ...this.state, ...newState };
         this.renderUI();
     }
 

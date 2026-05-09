@@ -283,17 +283,35 @@ class PatternsEngine:
         return None
     
     def detect_fvg(self, df):
-        """Detect Fair Value Gaps (FVG) / Imbalances in a dataframe."""
-        if len(df) < 3: return []
-        gaps = []
-        for i in range(2, len(df)):
+        """Detect Fair Value Gaps (FVG) / Imbalances and require a pullback Retest."""
+        if len(df) < 10: return []
+        signals = []
+        # Find the most recent FVG within the last 50 candles
+        start_idx = max(2, len(df)-50)
+        for i in range(start_idx, len(df)-2):
             # Bullish FVG (Low of candle 3 is above high of candle 1)
             if df['low'].iloc[i] > df['high'].iloc[i-2]:
-                gaps.append({"type": "FVG_BULL", "top": df['low'].iloc[i], "bottom": df['high'].iloc[i-2], "index": i})
+                gap_top = df['low'].iloc[i]
+                gap_bottom = df['high'].iloc[i-2]
+                
+                # Check if current price is pulling back INTO the gap
+                curr_low = df['low'].iloc[-1]
+                curr_close = df['close'].iloc[-1]
+                
+                if gap_bottom <= curr_low <= gap_top and curr_close > gap_bottom:
+                    signals.append({"type": "FVG_BULL_RETEST", "direction": "LONG", "score_bonus": 25})
+                    
             # Bearish FVG (High of candle 3 is below low of candle 1)
             elif df['high'].iloc[i] < df['low'].iloc[i-2]:
-                gaps.append({"type": "FVG_BEAR", "top": df['low'].iloc[i-2], "bottom": df['high'].iloc[i], "index": i})
-        return gaps
+                gap_bottom = df['low'].iloc[i-2]
+                gap_top = df['high'].iloc[i]
+                
+                curr_high = df['high'].iloc[-1]
+                curr_close = df['close'].iloc[-1]
+                
+                if gap_bottom <= curr_high <= gap_top and curr_close < gap_top:
+                    signals.append({"type": "FVG_BEAR_RETEST", "direction": "SHORT", "score_bonus": 25})
+        return signals
 
     def detect_order_blocks(self, df):
         """Detect Institutional Order Blocks (OB)."""
@@ -324,9 +342,21 @@ class PatternsEngine:
         atr = df['atr'].iloc[-1]
         entry = df['close'].iloc[-1]
         
-        # --- 1. Higher Timeframe Analysis (H1 Anchors) ---
+        # --- 1. Higher Timeframe Analysis (H1 Anchors & The River Rule) ---
         h1_bias = "NEUTRAL"
-        if h1_df is not None:
+        is_h1_bullish = True
+        is_h1_bearish = True
+        
+        if h1_df is not None and 'ema200' in h1_df.columns:
+            h1_ema = h1_df['ema200'].iloc[-1]
+            if entry < h1_ema:
+                is_h1_bullish = False
+            else:
+                is_h1_bearish = False
+                
+            # Default bias to the River direction
+            h1_bias = "LONG" if is_h1_bullish else "SHORT"
+            
             h1_obs = self.detect_order_blocks(h1_df)
             for ob in h1_obs:
                 if entry >= ob['low'] and entry <= ob['high']:
@@ -360,6 +390,12 @@ class PatternsEngine:
         for sig in signals:
             sig_type = sig.get('type', '')
             is_bull = "BULL" in sig_type or sig.get('direction') == "LONG" or "DEMAND" in sig_type
+            
+            # --- THE RIVER RULE (Strict Macro Trend Rejection) ---
+            if is_bull and not is_h1_bullish:
+                continue # Instantly reject LONGs in a bearish river
+            if not is_bull and not is_h1_bearish:
+                continue # Instantly reject SHORTs in a bullish river
             
             # Confluence check: Must align with H1 or be a strong solo reversal
             if h1_bias == "LONG" and is_bull:

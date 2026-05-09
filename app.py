@@ -80,21 +80,7 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     state.SHARED_DATA["last_ai_confidence"] = round(confidence * 100, 1)
     
     threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.80))
-    
-    if confidence < threshold:
-        log.warning("🛡️ AI SENTINEL REJECTED: %s (Confidence: %.1f%% < %.1f%%)", 
-                    symbol, confidence * 100, threshold * 100)
-        # Update dashboard status
-        state.SHARED_DATA["status"] = f"AI REJECTED {symbol}"
-        return
-
-    raw_signal["symbol"] = symbol
-    log.info(
-        "[SIGNAL] PATTERN DETECTED & AI APPROVED: %s | Score: %s | Confidence: %.1f%%",
-        raw_signal.get("pattern"),
-        raw_signal.get("score"),
-        confidence * 100
-    )
+    is_ai_approved = confidence >= threshold
 
     # 2. AI Rationale - THE EXPLAINABILITY LAYER
     explain_report = await explain_engine.generate_rationale(Signal(
@@ -110,7 +96,7 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     
     rationale_json = explain_report.json() if explain_report else "No rationale generated."
 
-    # 3. Save to Database
+    # 3. Save to Database (Persist even if rejected)
     signal_to_save = {
         "symbol":      symbol,
         "direction":   raw_signal["direction"],
@@ -122,7 +108,8 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         "score":       raw_signal["score"],
         "ml_confidence": confidence,
         "indicators_meta": f"Reason: {raw_signal['reason']}",
-        "ai_rationale": rationale_json
+        "ai_rationale": rationale_json,
+        "outcome": 0 if is_ai_approved else -2 # -2 for AI REJECTED status
     }
     
     from db_utils import get_db_connection
@@ -130,18 +117,19 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     if conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO signals (symbol, direction, entry_price, take_profit, stop_loss, timeframe, pattern, score, ml_confidence, indicators_meta, ai_rationale)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO signals (symbol, direction, entry_price, take_profit, stop_loss, timeframe, pattern, score, ml_confidence, indicators_meta, ai_rationale, outcome)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             signal_to_save["symbol"], signal_to_save["direction"], signal_to_save["entry_price"],
             signal_to_save["take_profit"], signal_to_save["stop_loss"], signal_to_save["timeframe"],
             signal_to_save["pattern"], signal_to_save["score"], signal_to_save["ml_confidence"],
-            signal_to_save["indicators_meta"], signal_to_save["ai_rationale"]
+            signal_to_save["indicators_meta"], signal_to_save["ai_rationale"], signal_to_save["outcome"]
         ))
         conn.commit()
         conn.close()
 
-    # 4. Add to Dashboard Feed
+    # 4. Add to Dashboard Feed instantly
+    status_label = "AI APPROVED" if is_ai_approved else "AI REJECTED"
     state.SHARED_DATA["signals"].insert(0, {
         "symbol": symbol,
         "direction": raw_signal["direction"],
@@ -150,11 +138,27 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         "sl": raw_signal["sl"],
         "pattern": raw_signal["pattern"],
         "score": raw_signal["score"],
+        "confidence": f"{int(confidence*100)}%",
+        "status": status_label,
         "ai_rationale": explain_report.summary if explain_report else "SMC TECHNICAL FLOW",
         "created_at": datetime.now().strftime("%H:%M:%S")
     })
-    # Keep only the last 10 signals
-    state.SHARED_DATA["signals"] = state.SHARED_DATA["signals"][:10]
+    # Keep only the last 15 signals
+    state.SHARED_DATA["signals"] = state.SHARED_DATA["signals"][:15]
+
+    if not is_ai_approved:
+        log.warning("🛡️ AI SENTINEL REJECTED: %s (Confidence: %.1f%% < %.1f%%)", 
+                    symbol, confidence * 100, threshold * 100)
+        state.SHARED_DATA["status"] = f"AI REJECTED {symbol}"
+        return
+
+    raw_signal["symbol"] = symbol
+    log.info(
+        "[SIGNAL] PATTERN DETECTED & AI APPROVED: %s | Score: %s | Confidence: %.1f%%",
+        raw_signal.get("pattern"),
+        raw_signal.get("score"),
+        confidence * 100
+    )
 
     # 4. Automated Execution
     if not state.SHARED_DATA.get("is_bot_active", False):
@@ -181,11 +185,26 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         log.error("❌ Failed to build Signal model from pattern data: %s", exc)
         return
 
-    res = get_executor().place_trade(signal, platform=BROKER_TYPE)
-    if res and res.get("status") == "success":
-        log.info("✅ Trade Executed Successfully on %s", BROKER_TYPE)
-        
-        # Send Telegram Notification
+    brokers_to_execute = [BROKER_TYPE]
+    mirror_brokers = os.getenv("MIRROR_BROKERS", "")
+    if mirror_brokers:
+        additional = [b.strip() for b in mirror_brokers.split(",") if b.strip()]
+        for b in additional:
+            if b not in brokers_to_execute:
+                brokers_to_execute.append(b)
+
+    success_count = 0
+    for broker in brokers_to_execute:
+        res = get_executor().place_trade(signal, platform=broker)
+        if res and res.get("status") == "success":
+            log.info("✅ Trade Executed Successfully on %s", broker.upper())
+            success_count += 1
+        else:
+            msg = res.get("message", "Unknown Error") if res else "No response"
+            log.error("❌ Execution Failed on %s: %s", broker.upper(), msg)
+            
+    if success_count > 0:
+        # Send Telegram Notification ONCE
         telegram_bot.send_signal_alert(signal_to_save)
         
         # Record trade for dashboard visibility
@@ -204,9 +223,6 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         active_trades.insert(0, trade_record)
         state.SHARED_DATA["active_trades"] = active_trades[:20] # Keep last 20
         state.save_shared_state(state.SHARED_DATA)
-    else:
-        msg = res.get("message", "Unknown Error") if res else "No response"
-        log.error("❌ Execution Failed on %s: %s", BROKER_TYPE, msg)
 
 
 async def run_god_mode(symbol: str, df=None) -> None:
@@ -286,14 +302,29 @@ async def run_god_mode(symbol: str, df=None) -> None:
         log.error("❌ Failed to build Signal model from God-Mode data: %s", exc)
         return
 
-    res = get_executor().place_trade(signal, platform=BROKER_TYPE)
-    if res and res.get("status") == "success":
-        log.info("✅ God-Mode Trade Executed Successfully on %s", BROKER_TYPE)
-        
-        # Send Telegram Notification
+    brokers_to_execute = [BROKER_TYPE]
+    mirror_brokers = os.getenv("MIRROR_BROKERS", "")
+    if mirror_brokers:
+        additional = [b.strip() for b in mirror_brokers.split(",") if b.strip()]
+        for b in additional:
+            if b not in brokers_to_execute:
+                brokers_to_execute.append(b)
+
+    success_count = 0
+    for broker in brokers_to_execute:
+        res = get_executor().place_trade(signal, platform=broker)
+        if res and res.get("status") == "success":
+            log.info("✅ God-Mode Trade Executed Successfully on %s", broker.upper())
+            success_count += 1
+        else:
+            msg = res.get("message", "Unknown Error") if res else "No response"
+            log.error("❌ God-Mode Execution Failed on %s: %s", broker.upper(), msg)
+
+    if success_count > 0:
+        # Send Telegram Notification ONCE
         telegram_bot.send_signal_alert(raw_signal)
         
-        # Record trade for dashboard visibility
+        # Record trade for dashboard visibility ONCE
         trade_record = {
             "symbol": signal.symbol,
             "direction": signal.direction,
@@ -309,9 +340,6 @@ async def run_god_mode(symbol: str, df=None) -> None:
         active_trades.insert(0, trade_record)
         state.SHARED_DATA["active_trades"] = active_trades[:20]
         state.save_shared_state(state.SHARED_DATA)
-    else:
-        msg = res.get("message", "Unknown Error") if res else "No response"
-        log.error("❌ God-Mode Execution Failed: %s", msg)
 
 
 def update_pnl():
@@ -434,14 +462,19 @@ async def mt5_polling_loop(symbols: list, timeframe_str: str = "5m") -> None:
             current_symbols = symbols
             
         for symbol in current_symbols:
+            # Global Exness Fix: Ensure the suffix is ALWAYS a lowercase 'm'
+            symbol = symbol.upper()
+            if symbol.endswith('M'):
+                symbol = symbol[:-1] + 'm'
             try:
-                # Concurrent MTF fetching
+                # Concurrent MTF fetching with timeout to prevent loop hanging
                 tasks = [
                     asyncio.to_thread(adapter.fetch_historical_data, symbol, mt5.TIMEFRAME_M5, 500),
                     asyncio.to_thread(adapter.fetch_historical_data, symbol, mt5.TIMEFRAME_M15, 200),
                     asyncio.to_thread(adapter.fetch_historical_data, symbol, mt5.TIMEFRAME_H1, 200),
                 ]
-                results = await asyncio.gather(*tasks)
+                # Wait maximum 15s for MT5 response
+                results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=15.0)
                 
                 m5_df, m15_df, h1_df = results
                 
@@ -453,6 +486,8 @@ async def mt5_polling_loop(symbols: list, timeframe_str: str = "5m") -> None:
                         'h1': h1_df if not h1_df.empty else None
                     }
                     await process_candle(symbol, bundle)
+            except asyncio.TimeoutError:
+                log.error("⏳ MT5 Polling Timeout for %s - terminal might be unresponsive", symbol)
             except Exception as e:
                 log.error("❌ Error polling %s: %s", symbol, e)
         
@@ -481,7 +516,11 @@ async def pnl_update_loop():
             # 1. Fetch Actual Positions from MT5
             positions = mt5.positions_get()
             if positions is None:
-                log.error("MT5: Failed to fetch positions in PnL loop")
+                err = mt5.last_error()
+                log.error(f"MT5: Failed to fetch positions in PnL loop. Error: {err}")
+                if not adapter.is_connected():
+                    log.warning("MT5 disconnected in PnL loop. Triggering reconnect...")
+                    executor.reconnect_all()
                 await asyncio.sleep(5)
                 continue
 
@@ -499,66 +538,69 @@ async def pnl_update_loop():
             existing_active = {str(t.get("ticket")): t for t in state.SHARED_DATA.get("active_trades", [])}
 
             for p in positions:
-                ticket_id = str(p.ticket)
-                # Calculate PnL manually for UI responsiveness
-                pnl = p.profit + p.swap
-                
-                # --- [SMART TRAILING MONITOR] ---
-                if executor.risk_engine.config.enable_trailing_stop:
-                    is_long = p.type == mt5.POSITION_TYPE_BUY
-                    entry = p.price_open
-                    curr = p.price_current
-                    current_sl = p.sl
-                    tp = p.tp
+                try:
+                    ticket_id = str(p.ticket)
+                    # Calculate PnL manually for UI responsiveness
+                    pnl = p.profit + p.swap
                     
-                    # Logic: Only trail if we are in profit
-                    in_profit = (curr > entry) if is_long else (curr < entry)
-                    
-                    if in_profit and tp > 0:
-                        total_dist = abs(tp - entry)
-                        prog_dist = abs(curr - entry)
-                        progress = prog_dist / total_dist if total_dist > 0 else 0
+                    # --- [SMART TRAILING MONITOR] ---
+                    if executor.risk_engine.config.enable_trailing_stop:
+                        is_long = p.type == mt5.POSITION_TYPE_BUY
+                        entry = p.price_open
+                        curr = p.price_current
+                        current_sl = p.sl
+                        tp = p.tp
                         
-                        # 1. Break-Even Activation (at 50% progress)
-                        activation = executor.risk_engine.config.trailing_stop_activation_pct
-                        if progress >= activation:
-                            be_level = entry + (0.0001 if is_long else -0.0001) # tiny buffer
-                            # Only move if we haven't moved past BE yet
-                            if (is_long and current_sl < be_level) or (not is_long and (current_sl > be_level or current_sl == 0)):
-                                log.info(f"🛡️ Smart Trailing: Moving Ticket {p.ticket} to Break-Even (+50% goal hit)")
-                                adapter.modify_order(p.ticket, be_level, tp)
+                        # Logic: Only trail if we are in profit
+                        in_profit = (curr > entry) if is_long else (curr < entry)
                         
-                        # 2. Continuous Trailing (Once past 75% progress or fixed distance)
-                        dist_pct = executor.risk_engine.config.trailing_stop_distance_pct / 100
-                        trail_price = curr * (1 - dist_pct) if is_long else curr * (1 + dist_pct)
-                        
-                        if (is_long and trail_price > current_sl) or (not is_long and (trail_price < current_sl or current_sl == 0)):
-                            # Ensure we don't move SL too close (min 50 points)
-                            if abs(trail_price - curr) > (curr * 0.0005):
-                                log.info(f"🎢 Smart Trailing: Ratcheting Ticket {p.ticket} SL to {trail_price:.5f}")
-                                adapter.modify_order(p.ticket, trail_price, tp)
-                # -------------------------------
+                        if in_profit and tp > 0:
+                            total_dist = abs(tp - entry)
+                            prog_dist = abs(curr - entry)
+                            progress = prog_dist / total_dist if total_dist > 0 else 0
+                            
+                            # 1. Break-Even Activation (at 50% progress)
+                            activation = executor.risk_engine.config.trailing_stop_activation_pct
+                            if progress >= activation:
+                                be_level = entry + (0.0001 if is_long else -0.0001) # tiny buffer
+                                # Only move if we haven't moved past BE yet
+                                if (is_long and current_sl < be_level) or (not is_long and (current_sl > be_level or current_sl == 0)):
+                                    log.info(f"🛡️ Smart Trailing: Moving Ticket {p.ticket} to Break-Even (+50% goal hit)")
+                                    adapter.modify_order(p.ticket, be_level, tp)
+                            
+                            # 2. Continuous Trailing (Once past 75% progress or fixed distance)
+                            dist_pct = executor.risk_engine.config.trailing_stop_distance_pct / 100
+                            trail_price = curr * (1 - dist_pct) if is_long else curr * (1 + dist_pct)
+                            
+                            if (is_long and trail_price > current_sl) or (not is_long and (trail_price < current_sl or current_sl == 0)):
+                                # Ensure we don't move SL too close (min 50 points)
+                                if abs(trail_price - curr) > (curr * 0.0005):
+                                    log.info(f"🎢 Smart Trailing: Ratcheting Ticket {p.ticket} SL to {trail_price:.5f}")
+                                    adapter.modify_order(p.ticket, trail_price, tp)
+                    # -------------------------------
 
-                # Check if we already have this trade recorded (to keep our custom metadata like 'time')
-                if ticket_id in existing_active:
-                    trade = existing_active[ticket_id]
-                    trade["pnl"] = round(pnl, 2)
-                    trade["current_price"] = p.price_current
-                else:
-                    # New trade detected directly from MT5
-                    trade = {
-                        "ticket": p.ticket,
-                        "symbol": p.symbol,
-                        "direction": "LONG" if p.type == mt5.POSITION_TYPE_BUY else "SHORT",
-                        "entry": p.price_open,
-                        "tp": p.tp,
-                        "sl": p.sl,
-                        "qty": p.volume,
-                        "pnl": round(pnl, 2),
-                        "status": "ACTIVE",
-                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                current_active.append(trade)
+                    # Check if we already have this trade recorded (to keep our custom metadata like 'time')
+                    if ticket_id in existing_active:
+                        trade = existing_active[ticket_id]
+                        trade["pnl"] = round(pnl, 2)
+                        trade["current_price"] = p.price_current
+                    else:
+                        # New trade detected directly from MT5
+                        trade = {
+                            "ticket": p.ticket,
+                            "symbol": p.symbol,
+                            "direction": "LONG" if p.type == mt5.POSITION_TYPE_BUY else "SHORT",
+                            "entry": p.price_open,
+                            "tp": p.tp,
+                            "sl": p.sl,
+                            "qty": p.volume,
+                            "pnl": round(pnl, 2),
+                            "status": "ACTIVE",
+                            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                    current_active.append(trade)
+                except Exception as ex:
+                    log.error(f"Error processing position {p.ticket}: {ex}")
 
             # 4. Check for trades that were in our list but are now gone from MT5 (Closed)
             current_tickets = {str(p.ticket) for p in positions}

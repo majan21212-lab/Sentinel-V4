@@ -501,6 +501,96 @@ class MT5Adapter(BaseExchangeAdapter):
         if _MT5_DISABLED or mt5 is None: return False
         return mt5.terminal_info() is not None
 
+# ── Fleet Expansion Adapters (Stubs) ──────────────────────────────────────────
+
+class OKXAdapter(BaseExchangeAdapter):
+    def __init__(self):
+        self.exchange = ccxt.okx({
+            "apiKey":          os.getenv("OKX_API_KEY"),
+            "secret":          os.getenv("OKX_SECRET_KEY"),
+            "password":        os.getenv("OKX_PASSWORD"),
+            "enableRateLimit": True,
+            "options":         {"defaultType": "swap"},
+        }) if os.getenv("OKX_API_KEY") else None
+        log.info("OKXAdapter initialised (swap mode).")
+
+    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "OKX routing not implemented"}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: return {}
+    def get_active_symbols(self) -> list[str]: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: return True
+
+class BybitAdapter(BaseExchangeAdapter):
+    def __init__(self):
+        self.exchange = ccxt.bybit({
+            "apiKey":          os.getenv("BYBIT_API_KEY"),
+            "secret":          os.getenv("BYBIT_SECRET_KEY"),
+            "enableRateLimit": True,
+            "options":         {"defaultType": "linear"},
+        }) if os.getenv("BYBIT_API_KEY") else None
+        log.info("BybitAdapter initialised (linear futures mode).")
+
+    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "Bybit routing not implemented"}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: return {}
+    def get_active_symbols(self) -> list[str]: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: return True
+
+class NinjaTraderAdapter(BaseExchangeAdapter):
+    def __init__(self):
+        self.webhook_url = os.getenv("NINJATRADER_WEBHOOK_URL")
+        log.info("NinjaTraderAdapter initialised (Webhook Mode).")
+    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "Not implemented"}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: return {}
+    def get_active_symbols(self) -> list[str]: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: return True
+
+class BarakaAdapter(BaseExchangeAdapter):
+    def __init__(self):
+        log.info("BarakaAdapter initialised (Placeholder).")
+    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "Not implemented"}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: return {}
+    def get_active_symbols(self) -> list[str]: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: return True
+
+class Plus500Adapter(BaseExchangeAdapter):
+    def __init__(self):
+        log.info("Plus500Adapter initialised (Placeholder).")
+    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "Not implemented"}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: return {}
+    def get_active_symbols(self) -> list[str]: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: return True
+
+class XTBAdapter(BaseExchangeAdapter):
+    def __init__(self):
+        log.info("XTBAdapter initialised (Placeholder).")
+    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "Not implemented"}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: return {}
+    def get_active_symbols(self) -> list[str]: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: return True
+
 
 # ── Execution Layer ───────────────────────────────────────────────────────────
 
@@ -539,6 +629,31 @@ class ExecutionLayer:
                 self.adapters["mt5"] = MT5Adapter()
             except Exception as exc:
                 log.warning("MT5Adapter failed to initialise: %s", exc)
+
+        # Fleet Expansion Registrations
+        if os.getenv("OKX_API_KEY"):
+            try:
+                self.adapters["okx"] = OKXAdapter()
+            except Exception as exc:
+                log.warning("OKXAdapter failed to initialise: %s", exc)
+
+        if os.getenv("BYBIT_API_KEY"):
+            try:
+                self.adapters["bybit"] = BybitAdapter()
+            except Exception as exc:
+                log.warning("BybitAdapter failed to initialise: %s", exc)
+                
+        if os.getenv("NINJATRADER_WEBHOOK_URL"):
+            self.adapters["ninjatrader"] = NinjaTraderAdapter()
+            
+        if os.getenv("BARAKA_CONFIG"):
+            self.adapters["baraka"] = BarakaAdapter()
+            
+        if os.getenv("PLUS500_CONFIG"):
+            self.adapters["plus500"] = Plus500Adapter()
+            
+        if os.getenv("XTB_API_KEY"):
+            self.adapters["xtb"] = XTBAdapter()
 
     def place_trade(self, signal: Signal, platform: str = None) -> dict:
         """
@@ -621,7 +736,7 @@ class ExecutionLayer:
                 notifier.send_message(
                     f"🚀 *Executed: {signal.symbol}*\n"
                     f"• {signal.direction} @ {signal.entry}\n"
-                    f"• SL: {signal.sl} | TP: {signal.tp}\n"
+                    f"• SL: {signal.sl} | TP: {signal.tp1}\n"
                     f"• Size: {signal.qty}"
                 )
             return res
@@ -642,16 +757,18 @@ class ExecutionLayer:
             log.info("🎯 PROCESSING SOVEREIGN ACTION: %s for %s", action.upper(), ticker)
             
             if action in ["buy", "sell"]:
-                # Convert to Signal model
                 try:
+                    # Detect if it's SATS based on payload
+                    is_sats = "tqi" in webhook_data or "score" in webhook_data
                     signal = Signal(
                         symbol=ticker,
                         direction="LONG" if action == "buy" else "SHORT",
                         entry=float(webhook_data.get("price", 0)),
                         stop_loss=float(webhook_data.get("sl", 0)),
-                        take_profit=float(webhook_data.get("tp", 0)),
-                        pattern="Sovereign Institutional",
-                        score=95.0 # High confidence for institutional signals
+                        take_profit=float(webhook_data.get("tp1", webhook_data.get("tp", 0))),
+                        tp2=float(webhook_data.get("tp2")) if webhook_data.get("tp2") else None,
+                        pattern="SATS" if is_sats else "Sovereign Institutional",
+                        score=float(webhook_data.get("score", 95.0))
                     )
                     return self.place_trade(signal, platform=platform)
                 except Exception as e:

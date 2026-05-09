@@ -113,6 +113,18 @@ async def manual_trade(signal: Signal, platform: Optional[str] = None):
     else:
         raise HTTPException(status_code=400, detail=result.get('message') if result else "Execution failed")
 
+@app.post("/webhook")
+async def tradingview_webhook(payload: dict, token: str, platform: Optional[str] = None):
+    """Receives dynamic alerts from TradingView Pine Scripts (like SATS). URL must include ?token=YOUR_API_KEY"""
+    if token != SENTINEL_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid Sentinel Token")
+        
+    result = executor.handle_webhook_action(payload, platform=platform)
+    if result and result.get('status') in ['success', 'executed', 'partial_success']:
+        return {"status": "executed", "details": result}
+    else:
+        raise HTTPException(status_code=400, detail=result.get('message') if result else "Webhook execution failed")
+
 if __name__ == "__main__":
     import uvicorn
     setup_database()
