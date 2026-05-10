@@ -2,15 +2,16 @@
     "prices": {
         "XAUUSDm": 4715.138,
         "EURUSDm": 1.17848,
-        "BTCUSDm": 80888.51,
-        "ETHUSDm": 2381.92,
+        "BTCUSDm": 80766.45,
+        "ETHUSDm": 2330.28,
         "XRPUSDm": 1.39907,
         "GBPUSDm": 1.36322,
         "US30m": 49045.8,
         "XAGUSDm": 80.331,
         "USDCADm": 1.36754,
         "AUDUSDm": 0.72462,
-        "USDJPYm": 156.676
+        "USDJPYm": 156.676,
+        "SOLUSDm": 92.8459
     },
     "status": "ONLINE",
     "signals": [

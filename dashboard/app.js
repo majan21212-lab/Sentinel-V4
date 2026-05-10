@@ -1,4 +1,4 @@
-const API_TOKEN = 'sentinel_debug_key_2026';
+const API_TOKEN = 'sentinel_debug_key';
 const POLL_INTERVAL = 3000;
 
 const botStatus = document.getElementById('bot-status');
@@ -7,7 +7,7 @@ const dailyPnl = document.getElementById('daily-pnl');
 const signalsList = document.getElementById('signals-list');
 const killBtn = document.getElementById('kill-switch');
 
-async def apiFetch(endpoint, method = 'GET', body = None) {
+async function apiFetch(endpoint, method = 'GET', body = None) {
     const headers = {
         'X-Token': API_TOKEN,
         'Content-Type': 'application/json'
@@ -20,14 +20,14 @@ async def apiFetch(endpoint, method = 'GET', body = None) {
             body: body ? JSON.stringify(body) : null
         });
         if (!response.ok) throw new Error('API Error');
-        return await response.ok ? response.json() : null;
+        return await response.json();
     } catch (err) {
         console.error(err);
         return null;
     }
 }
 
-async def updateDashboard() {
+async function updateDashboard() {
     // 1. Get Status
     const status = await apiFetch('/status');
     if (status) {

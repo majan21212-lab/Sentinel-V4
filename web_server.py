@@ -41,6 +41,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Middleware to handle the /web-api prefix from the frontend build
+@app.middleware("http")
+async def strip_web_api_prefix(request: Request, call_next):
+    if request.url.path.startswith("/web-api"):
+        new_scope = request.scope.copy()
+        new_scope['path'] = request.scope['path'].replace("/web-api", "", 1)
+        # Create a new request with the modified scope
+        from starlette.requests import Request as StarletteRequest
+        new_request = StarletteRequest(new_scope)
+        return await call_next(new_request)
+    return await call_next(request)
+
 from dotenv import load_dotenv
 load_dotenv()
 DB_FILE = os.getenv('DB_NAME', 'trading_bot.db')
@@ -183,9 +195,6 @@ async def get_analytics():
         return JSONResponse(content=df.set_index('pattern')['accuracy'].to_dict())
     except:
         return JSONResponse(content={})
-
-if os.path.exists(get_resource_path("Elirox")):
-    app.mount("/static", StaticFiles(directory=get_resource_path("Elirox")), name="static")
 
 @app.get("/")
 async def get_index():
@@ -698,6 +707,20 @@ async def remove_market(request: Request):
         state.save_shared_state(SHARED_DATA)
         return JSONResponse(content={"status": "success"})
     return JSONResponse(status_code=404, content={"status": "error", "message": "Symbol not found"})
+
+# Catch-all: serve index.html for any unmatched GET (React Router SPA support)
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    # Don't intercept /api/*, /web-api/* or /ws routes
+    if full_path.startswith("api/") or full_path.startswith("web-api/") or full_path == "ws":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+    # Serve static assets directly if they exist
+    asset_path = get_resource_path(f"Elirox/{full_path}")
+    if os.path.isfile(asset_path):
+        return FileResponse(asset_path)
+    # Otherwise fall back to index.html for React routing
+    return FileResponse(get_resource_path("Elirox/index.html"))
 
 def run_server(host="0.0.0.0", port=8000):
     # Start the broadcast task within the event loop

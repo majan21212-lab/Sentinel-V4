@@ -294,6 +294,21 @@ class MT5Adapter(BaseExchangeAdapter):
             log.error(f"MT5 initialisation failed: {error}")
             raise RuntimeError(f"MT5 initialisation failed: {error}")
 
+        # Login to account
+        account = int(os.getenv("EXNESS_ACCOUNT", 0))
+        password = os.getenv("EXNESS_PASSWORD", "")
+        server = os.getenv("EXNESS_SERVER", "")
+        
+        if account and password and server:
+            if not mt5.login(login=account, password=password, server=server):
+                error = mt5.last_error()
+                log.error(f"MT5 login failed for {account}: {error}")
+                # We don't raise here so the system can still start even if broker is down
+            else:
+                log.info(f"✅ MT5 login successful for account {account}")
+        else:
+            log.warning("MT5 credentials missing in .env - skipped login")
+
         # Resolve filling constants now that mt5 is live
         self._FILLING_MAP = {
             "FOK":    mt5.ORDER_FILLING_FOK,
