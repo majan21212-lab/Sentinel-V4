@@ -62,11 +62,13 @@ class RiskEngine:
             if "XAU" in signal.symbol or "XAG" in signal.symbol:
                 multiplier = 100.0
             elif "BTC" in signal.symbol or "ETH" in signal.symbol:
-                multiplier = 1.0 # Crypto usually 1 coin per lot
-            elif "AAPL" in signal.symbol or "TSLA" in signal.symbol:
-                multiplier = 1.0 # Stocks usually 1 share per lot
+                multiplier = 1.0  # Crypto: 1 coin per lot
+            elif any(x in signal.symbol for x in ["AAPL", "TSLA", "AMZN", "GOOG"]):
+                multiplier = 1.0  # Stocks: 1 share per lot
+            elif any(x in signal.symbol for x in ["US30", "NAS", "SPX", "GER", "UK1", "JP225", "AUS"]):
+                multiplier = 1.0  # FIX: Index CFDs use price-per-point, NOT 100,000 lot size
             else:
-                multiplier = 100000.0 # Standard Forex Lot size
+                multiplier = 100000.0  # Standard Forex Lot size (EUR/USD, GBP/USD, etc.)
                 
         order_value = signal.entry * signal.qty * multiplier
         if order_value < self.config.min_order_value_usd:
@@ -86,13 +88,14 @@ class RiskEngine:
                     return False, f"Correlation Risk: Highly correlated asset(s) {list(active_correlated)} already open."
 
         # 6. Strict AI Confidence Filter
-        # Reject if AI confidence is provided and falls below the 85.0 threshold
+        # Reject if AI confidence is provided and falls below the configured threshold
         confidence = signal.score
         if hasattr(signal, 'explainability') and signal.explainability is not None:
             confidence = signal.explainability.ai_confidence_score
             
-        if confidence > 0 and confidence < 85.0:
-            return False, f"Strict Filter: AI Confidence ({confidence:.1f}) is below the minimum 85.0 threshold."
+        threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.85)) * 100
+        if confidence > 0 and confidence < threshold:
+            return False, f"Strict Filter: AI Confidence ({confidence:.1f}) is below the minimum {threshold:.1f} threshold."
 
         return True, "Risk validation passed."
 
@@ -125,7 +128,7 @@ class RiskEngine:
             elif current_profit >= 200:
                 new_lock_level = 200
             else:
-                # Early Tier: Lock in blocks of $50
+                # Early Tier: Lock in blocks of $25
                 new_lock_level = (current_profit // self.config.profit_lock_step_usd) * self.config.profit_lock_step_usd
             
             # Ensure we only move the lock UPWARD

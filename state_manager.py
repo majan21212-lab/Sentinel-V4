@@ -36,7 +36,13 @@ def load_shared_state():
         "demo_balance": 200.00,
         "execution_bias": "TREND",
         "risk_config": {},
-        "analytics": {}
+        "analytics": {},
+        "user_profile": {
+            "name": "Commander",
+            "username": "admin",
+            "password": "password123",
+            "photo_url": ""
+        }
     }
     if os.path.exists(STATE_FILE):
         with STATE_LOCK:
@@ -94,3 +100,32 @@ def update_shared_data(key, value):
     if key in SHARED_DATA:
         SHARED_DATA[key] = value
         save_shared_state(SHARED_DATA)
+
+# ── Deduplication helpers ──────────────────────────────────────────────────────
+
+# In-memory set of ticket IDs already moved to trade_history this session.
+# Prevents the same closed trade from being appended on every polling cycle.
+_LOGGED_CLOSED_TICKETS: set = set()
+
+def record_closed_trade(trade: dict):
+    """
+    Safely moves a completed trade into trade_history exactly ONCE.
+    Call this whenever a trade's status transitions to CLOSED/STOPPED/TP.
+
+    Parameters
+    ----------
+    trade : dict  — the trade dict (must contain a 'ticket' key).
+    """
+    global SHARED_DATA, _LOGGED_CLOSED_TICKETS
+    ticket = str(trade.get("ticket", ""))
+    if not ticket or ticket in _LOGGED_CLOSED_TICKETS:
+        return  # already logged — skip
+
+    _LOGGED_CLOSED_TICKETS.add(ticket)
+    history = SHARED_DATA.get("trade_history", [])
+    # Prepend and cap at 200 entries
+    history.insert(0, dict(trade))
+    SHARED_DATA["trade_history"] = history[:200]
+    save_shared_state(SHARED_DATA)
+    log.info(f"📋 Trade #{ticket} moved to history (total: {len(SHARED_DATA['trade_history'])})")
+
