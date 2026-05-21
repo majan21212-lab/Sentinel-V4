@@ -73,6 +73,16 @@ def _adx_full(high, low, close, length=14):
     adx = dx.ewm(alpha=1/length, adjust=False).mean()
     return adx, plus_di, minus_di
 
+def _pivots(series, left_len, right_len, is_high=True):
+    """Calculates pivot highs/lows using rolling windows."""
+    window = left_len + right_len + 1
+    if is_high:
+        rolling_max = series.rolling(window=window, center=True).max()
+        return series == rolling_max
+    else:
+        rolling_min = series.rolling(window=window, center=True).min()
+        return series == rolling_min
+
 # ── Data Fetching ─────────────────────────────────────────────────────────────
 
 def fetch_data(symbol, timeframe='5m', limit=500):
@@ -153,6 +163,8 @@ def calculate_indicators(df, symbol):
     bbands = _bbands(df['close'], length=20, std=2)
     if bbands is not None:
         df['bb_mid'] = bbands['BBM']
+        df['bb_upper'] = bbands['BBU']
+        df['bb_lower'] = bbands['BBL']
         df['bull_bb'] = df['close'] > df['bb_mid']
         df['bear_bb'] = df['close'] < df['bb_mid']
 
@@ -183,6 +195,50 @@ def calculate_indicators(df, symbol):
     df['bull_di'] = (df['plus_di'] > df['minus_di']) & df['adx_strong']   # bullish DI alignment
     df['bear_di'] = (df['minus_di'] > df['plus_di']) & df['adx_strong']   # bearish DI alignment
 
+    # 12. 8 AM UTC Key Levels
+    try:
+        idx = df.index if isinstance(df.index, pd.DatetimeIndex) else pd.to_datetime(df['timestamp'])
+        df['hour'] = idx.hour
+        df['is_8am'] = df['hour'] == 8
+        date_series = idx.date
+        
+        # Get the high and low of the 8am candles per day
+        daily_8am_high = df[df['is_8am']].groupby(date_series[df['is_8am']])['high'].max()
+        daily_8am_low = df[df['is_8am']].groupby(date_series[df['is_8am']])['low'].min()
+        
+        # Map back to df
+        df['8am_high'] = pd.Series(date_series, index=df.index).map(daily_8am_high).ffill()
+        df['8am_low'] = pd.Series(date_series, index=df.index).map(daily_8am_low).ffill()
+        
+        df['bull_8am_bounce'] = (df['low'] <= df['8am_low']) & (df['close'] > df['8am_low'])
+        df['bear_8am_bounce'] = (df['high'] >= df['8am_high']) & (df['close'] < df['8am_high'])
+    except Exception as e:
+        print(f"8 AM Key Level Error: {e}")
+        df['bull_8am_bounce'] = False
+        df['bear_8am_bounce'] = False
+
+    # 13. Swing Failure Pattern (SFP)
+    swing_len = 5
+    df['is_swing_high'] = _pivots(df['high'], swing_len, swing_len, is_high=True)
+    df['is_swing_low'] = _pivots(df['low'], swing_len, swing_len, is_high=False)
+    
+    # Forward fill the last known swing high/low price
+    df['prior_swing_high'] = df['high'].where(df['is_swing_high']).ffill().shift(1)
+    df['prior_swing_low'] = df['low'].where(df['is_swing_low']).ffill().shift(1)
+
+    df['bull_sfp'] = (df['low'] < df['prior_swing_low']) & (df['close'] > df['prior_swing_low'])
+    df['bear_sfp'] = (df['high'] > df['prior_swing_high']) & (df['close'] < df['prior_swing_high'])
+
+    # 14. Hybrid Momentum Confluence
+    df['ema9'] = _ema(df['close'], 9)
+    df['ema21'] = _ema(df['close'], 21)
+    if bbands is not None:
+        df['bull_hybrid_mom'] = (df['ema9'] > df['ema21']) & (df['rsi'] < 50) & (df['close'] <= df['bb_lower']) & vol_strong
+        df['bear_hybrid_mom'] = (df['ema9'] < df['ema21']) & (df['rsi'] > 50) & (df['close'] >= df['bb_upper']) & vol_strong
+    else:
+        df['bull_hybrid_mom'] = False
+        df['bear_hybrid_mom'] = False
+
     # Reset index back for subsequent processing if needed
     df.reset_index(inplace=True)
     return df
@@ -203,17 +259,20 @@ def check_signals(df, symbol, req_score=8):
     
     # Scoring — all factors are now directional (no factor applies to both sides)
     factors = [
-        ('mtf_bull',       'mtf_bear'),       # 1. EMA 200 trend filter
+        ('mtf_bull',       'mtf_bear'),        # 1. EMA 200 trend filter
         ('bull_hull',      'bear_hull'),       # 2. Hull MA baseline
         ('bull_vol_spike', 'bear_vol_spike'),  # 3. FIX: directional volume spike
         ('bull_mom',       'bear_mom'),        # 4. Momentum
-        ('bull_rsi',       'bear_rsi'),        # 5. RSI 50 filter
+        ('bull_rsi',       'bear_rsi'),        # 5. RSI filter
         ('bull_vwap',      'bear_vwap'),       # 6. Session-anchored VWAP
         ('bull_bb',        'bear_bb'),         # 7. Bollinger Band midline
         ('bull_sweep',     'bear_sweep'),      # 8. Liquidity sweep
         ('bull_fvg',       'bear_fvg'),        # 9. Fair value gap
         ('is_discount',    'is_premium'),      # 10. Price zone
         ('bull_di',        'bear_di'),         # 11. FIX: directional DI alignment
+        ('bull_8am_bounce','bear_8am_bounce'), # 12. 8 AM Key Level Support/Resistance
+        ('bull_sfp',       'bear_sfp'),        # 13. Swing Failure Pattern (SFP)
+        ('bull_hybrid_mom','bear_hybrid_mom'), # 14. Hybrid Momentum Confluence
     ]
 
     for bull_f, bear_f in factors:
@@ -226,9 +285,17 @@ def check_signals(df, symbol, req_score=8):
 
     signal = None
     atr = _atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
+    
+    # Advanced ATR-buffered SL / TP Logic based on Swing Points
+    prior_swing_low = current.get('prior_swing_low', current['low'])
+    if pd.isna(prior_swing_low): prior_swing_low = current['low']
+    
+    prior_swing_high = current.get('prior_swing_high', current['high'])
+    if pd.isna(prior_swing_high): prior_swing_high = current['high']
 
     if long_cond:
-        sl = current['close'] - (atr * 1.5)
+        # Long SL: Min of current low or prior swing low, minus ATR buffer
+        sl = min(current['low'], prior_swing_low) - (atr * 0.5)
         tp = current['close'] + (current['close'] - sl) * 2.0
         signal = {
             'type': 'LONG',
@@ -237,11 +304,12 @@ def check_signals(df, symbol, req_score=8):
             'stop_loss': sl,
             'take_profit': tp,
             'score': long_pts,
-            'reason': f'God-Mode Score: {long_pts}/10'
+            'reason': f'God-Mode Score: {long_pts}/14'
         }
 
     elif short_cond:
-        sl = current['close'] + (atr * 1.5)
+        # Short SL: Max of current high or prior swing high, plus ATR buffer
+        sl = max(current['high'], prior_swing_high) + (atr * 0.5)
         tp = current['close'] - (sl - current['close']) * 2.0
         signal = {
             'type': 'SHORT',
@@ -250,7 +318,7 @@ def check_signals(df, symbol, req_score=8):
             'stop_loss': sl,
             'take_profit': tp,
             'score': short_pts,
-            'reason': f'God-Mode Score: {short_pts}/10'
+            'reason': f'God-Mode Score: {short_pts}/14'
         }
 
     return signal
