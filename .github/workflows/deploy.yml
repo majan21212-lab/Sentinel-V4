@@ -8,14 +8,12 @@ env:
   PROJECT_ID: project-74a8fea6-391c-458b-832
   GCP_REGION: us-central1
   GCP_ZONE: us-central1-a
-  REPOSITORY: tradebot-repo
-  IMAGE: tradebot
-  INSTANCE_NAME: tradebot-instance
+  INSTANCE_NAME: majan21212-bot
   WIF_PROVIDER: projects/217006324676/locations/global/workloadIdentityPools/github-pool/providers/github-provider
   WIF_SERVICE_ACCOUNT: github-deployer@project-74a8fea6-391c-458b-832.iam.gserviceaccount.com
 
 jobs:
-  build-and-deploy:
+  deploy-to-vps:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -34,27 +32,8 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v2'
 
-      - name: 'Docker Auth'
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
-
-      - name: Build and Push Docker Image
+      - name: Trigger VPS Update
         run: |
-          docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }} .
-          docker tag us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }} us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
-          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:${{ github.sha }}
-          docker push us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest
+          echo "Resetting GCP Instance $INSTANCE_NAME to trigger startup script (git pull & restart)..."
+          gcloud compute instances reset ${{ env.INSTANCE_NAME }} --zone=${{ env.GCP_ZONE }} --project=${{ env.PROJECT_ID }} --quiet
 
-      - name: Update Service File on GCE
-        run: |
-          gcloud compute scp tradebot.service $INSTANCE_NAME:/tmp/tradebot.service --zone=$GCP_ZONE --tunnel-through-iap
-          gcloud compute ssh $INSTANCE_NAME --zone=$GCP_ZONE --tunnel-through-iap --command="sudo mv /tmp/tradebot.service /etc/systemd/system/tradebot.service && sudo systemctl daemon-reload"
-
-      - name: Deploy and Restart
-        run: |
-          gcloud compute ssh $INSTANCE_NAME --zone=$GCP_ZONE --tunnel-through-iap --command="
-            sudo gcloud auth configure-docker us-central1-docker.pkg.dev --quiet && \
-            sudo docker pull us-central1-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE:latest && \
-            sudo systemctl stop tradebot.service || true && \
-            sudo docker rm -f tradebot || true && \
-            sudo systemctl start tradebot.service
-          "
