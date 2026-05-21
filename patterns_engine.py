@@ -416,10 +416,13 @@ class PatternsEngine:
         total_score = min(100, base_score + 25 + nr7_boost) # SMC signals get a high bonus
         
         if total_score >= 60:
-            sl_dist = atr * 2
+            # OPTIMIZATION: Tightened safety net to 2.5 ATR for better R:R
+            sl_dist = atr * 2.5
             sl = entry - sl_dist if is_bull else entry + sl_dist
-            tp1 = entry + sl_dist if is_bull else entry - sl_dist
-            tp2 = entry + (sl_dist * 3) if is_bull else entry - (sl_dist * 3)
+            
+            # Risk-Reward: 1:2.0 for TP1, 1:5.0 for TP2 (Institutional Runner)
+            tp1 = entry + (sl_dist * 2.0) if is_bull else entry - (sl_dist * 2.0)
+            tp2 = entry + (sl_dist * 5.0) if is_bull else entry - (sl_dist * 5.0)
             
             return {
                 "pattern": primary.get('type', 'SMC_STRUCTURE'),

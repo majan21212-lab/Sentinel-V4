@@ -11,7 +11,7 @@ pm2 start app.py --name "sentinel-backend" --interpreter python
 
 :: Start Dashboard (Vite)
 echo 🌐 Launching React Frontend Service...
-pm2 start "npm run dev" --name "sentinel-dashboard"
+pm2 start "npm run dev" --name "sentinel-dashboard" --cwd "../../.."
 
 :: Save PM2 List for Auto-Restart on VPS Reboot
 pm2 save

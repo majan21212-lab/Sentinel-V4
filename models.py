@@ -67,9 +67,9 @@ class RiskConfig(BaseModel):
     max_account_drawdown_pct: float = 15.0 # Max drawdown from peak before lockdown
     daily_profit_target_usd: float = 50.0  # Mission target
     enable_profit_lock: bool = True       # Trailing floor enabled
-    profit_lock_step_usd: float = 50.0    # Lock in every $50
+    profit_lock_step_usd: float = 25.0    # Lock in every $25
     enable_trailing_stop: bool = True    # Smart Trailing for individual trades
-    trailing_stop_activation_pct: float = 0.5 # Activate at 50% of the way to TP1
+    trailing_stop_activation_pct: float = 0.25 # Activate at 25% of the way to TP1
     trailing_stop_distance_pct: float = 0.3   # Trail distance from current price
 
 class AccountStatus(BaseModel):

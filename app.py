@@ -79,7 +79,7 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     # Add confidence to shared state for UI visibility
     state.SHARED_DATA["last_ai_confidence"] = round(confidence * 100, 1)
     
-    threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.80))
+    threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.90))
     is_ai_approved = confidence >= threshold
 
     # 2. AI Rationale - THE EXPLAINABILITY LAYER
@@ -117,20 +117,22 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
     if conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO signals (symbol, direction, entry_price, take_profit, stop_loss, timeframe, pattern, score, ml_confidence, indicators_meta, ai_rationale, outcome)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO signals (symbol, direction, entry_price, take_profit, stop_loss, timeframe, pattern, score, ml_confidence, indicators_meta, ai_rationale, outcome, broker)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             signal_to_save["symbol"], signal_to_save["direction"], signal_to_save["entry_price"],
             signal_to_save["take_profit"], signal_to_save["stop_loss"], signal_to_save["timeframe"],
             signal_to_save["pattern"], signal_to_save["score"], signal_to_save["ml_confidence"],
-            signal_to_save["indicators_meta"], signal_to_save["ai_rationale"], signal_to_save["outcome"]
+            signal_to_save["indicators_meta"], signal_to_save["ai_rationale"], signal_to_save["outcome"],
+            BROKER_TYPE
         ))
         conn.commit()
         conn.close()
 
     # 4. Add to Dashboard Feed instantly
-    status_label = "AI APPROVED" if is_ai_approved else "AI REJECTED"
+    status_label = "ACTIVE" if is_ai_approved else "REJECTED"
     state.SHARED_DATA["signals"].insert(0, {
+        "id": f"SIG-{int(datetime.now().timestamp())}",
         "symbol": symbol,
         "direction": raw_signal["direction"],
         "entry": raw_signal["entry"],
@@ -140,6 +142,7 @@ async def run_jewel_elite(symbol: str, df=None) -> None:
         "score": raw_signal["score"],
         "confidence": f"{int(confidence*100)}%",
         "status": status_label,
+        "broker": BROKER_TYPE,
         "ai_rationale": explain_report.summary if explain_report else "SMC TECHNICAL FLOW",
         "created_at": datetime.now().strftime("%H:%M:%S")
     })
@@ -261,7 +264,7 @@ async def run_god_mode(symbol: str, df=None) -> None:
     ml = get_ml_validator()
     confidence = ml.predict_confidence(raw_signal)
     state.SHARED_DATA["last_ai_confidence"] = round(confidence * 100, 1)
-    threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.85))
+    threshold = float(os.getenv("AI_CONFIDENCE_THRESHOLD", 0.90))
     
     if confidence < threshold:
         log.warning("🛡️ AI SENTINEL REJECTED GOD-MODE: %s (Confidence: %.1f%%)", 
@@ -279,6 +282,24 @@ async def run_god_mode(symbol: str, df=None) -> None:
         pattern="GodMode",
         reason=raw_signal.get("reason", "")
     ))
+    
+    # 5.5 Add to Dashboard Feed instantly
+    state.SHARED_DATA["signals"].insert(0, {
+        "id": f"SIG-{int(datetime.now().timestamp())}",
+        "symbol": symbol,
+        "direction": raw_signal["type"],
+        "entry": raw_signal["entry"],
+        "tp": raw_signal["take_profit"],
+        "sl": raw_signal["stop_loss"],
+        "pattern": "GodMode",
+        "score": raw_signal["score"],
+        "confidence": f"{int(confidence*100)}%",
+        "status": "ACTIVE",
+        "broker": BROKER_TYPE,
+        "ai_rationale": explain_report.summary if explain_report else "GOD-MODE TECHNICAL FLOW",
+        "created_at": datetime.now().strftime("%H:%M:%S")
+    })
+    state.SHARED_DATA["signals"] = state.SHARED_DATA["signals"][:15]
     
     # 6. Automated Execution
     if not state.SHARED_DATA.get("is_bot_active", False):
@@ -506,122 +527,117 @@ def run_scheduler():
 
 
 async def pnl_update_loop():
-    """Rapid loop to fetch actual positions from MT5 and sync the dashboard state."""
+    """Rapid loop to fetch actual positions from all brokers and sync the dashboard state."""
     executor = get_executor()
-    adapter = executor.adapters.get("mt5")
-    if not adapter: return
     
     while True:
         try:
-            # 1. Fetch Actual Positions from MT5
-            positions = mt5.positions_get()
-            if positions is None:
-                err = mt5.last_error()
-                log.error(f"MT5: Failed to fetch positions in PnL loop. Error: {err}")
-                if not adapter.is_connected():
-                    log.warning("MT5 disconnected in PnL loop. Triggering reconnect...")
-                    executor.reconnect_all()
-                await asyncio.sleep(5)
-                continue
+            # 1. Initialize broker stats if missing
+            if "broker_stats" not in state.SHARED_DATA:
+                state.SHARED_DATA["broker_stats"] = {}
 
-            # 2. Sync Account Balance
-            account_info = mt5.account_info()
-            if account_info:
-                state.SHARED_DATA["balance"] = account_info.balance
-                state.SHARED_DATA["equity"] = account_info.equity
-                if state.SHARED_DATA.get("demo_mode"):
-                    state.SHARED_DATA["demo_balance"] = account_info.balance
-
-            # 3. Rebuild active_trades list from MT5 data
-            current_active = []
-            history = state.SHARED_DATA.get("trade_history", [])
-            existing_active = {str(t.get("ticket")): t for t in state.SHARED_DATA.get("active_trades", [])}
-
-            for p in positions:
+            # 2. Loop through all active adapters
+            for broker_id, adapter in executor.adapters.items():
                 try:
-                    ticket_id = str(p.ticket)
-                    # Calculate PnL manually for UI responsiveness
-                    pnl = p.profit + p.swap
-                    
-                    # --- [SMART TRAILING MONITOR] ---
-                    if executor.risk_engine.config.enable_trailing_stop:
-                        is_long = p.type == mt5.POSITION_TYPE_BUY
-                        entry = p.price_open
-                        curr = p.price_current
-                        current_sl = p.sl
-                        tp = p.tp
+                    balance_info = adapter.get_balance()
+                    if balance_info:
+                        equity = 0.0
+                        balance = 0.0
                         
-                        # Logic: Only trail if we are in profit
-                        in_profit = (curr > entry) if is_long else (curr < entry)
-                        
-                        if in_profit and tp > 0:
-                            total_dist = abs(tp - entry)
-                            prog_dist = abs(curr - entry)
-                            progress = prog_dist / total_dist if total_dist > 0 else 0
-                            
-                            # 1. Break-Even Activation (at 50% progress)
-                            activation = executor.risk_engine.config.trailing_stop_activation_pct
-                            if progress >= activation:
-                                be_level = entry + (0.0001 if is_long else -0.0001) # tiny buffer
-                                # Only move if we haven't moved past BE yet
-                                if (is_long and current_sl < be_level) or (not is_long and (current_sl > be_level or current_sl == 0)):
-                                    log.info(f"🛡️ Smart Trailing: Moving Ticket {p.ticket} to Break-Even (+50% goal hit)")
-                                    adapter.modify_order(p.ticket, be_level, tp)
-                            
-                            # 2. Continuous Trailing (Once past 75% progress or fixed distance)
-                            dist_pct = executor.risk_engine.config.trailing_stop_distance_pct / 100
-                            trail_price = curr * (1 - dist_pct) if is_long else curr * (1 + dist_pct)
-                            
-                            if (is_long and trail_price > current_sl) or (not is_long and (trail_price < current_sl or current_sl == 0)):
-                                # Ensure we don't move SL too close (min 50 points)
-                                if abs(trail_price - curr) > (curr * 0.0005):
-                                    log.info(f"🎢 Smart Trailing: Ratcheting Ticket {p.ticket} SL to {trail_price:.5f}")
-                                    adapter.modify_order(p.ticket, trail_price, tp)
-                    # -------------------------------
+                        if broker_id == "mt5":
+                            equity = balance_info.get("equity", 0)
+                            balance = balance_info.get("balance", 0)
+                        elif broker_id == "binance":
+                            equity = float(balance_info.get("total", {}).get("USDT", 0))
+                            balance = equity
+                        elif broker_id == "alpaca":
+                            equity = float(getattr(balance_info, "equity", 0))
+                            balance = float(getattr(balance_info, "balance", 0))
+                        elif broker_id == "okx":
+                            # OKX balance structure via CCXT
+                            equity = float(balance_info.get("total", {}).get("USDT", 0))
+                            balance = equity
 
-                    # Check if we already have this trade recorded (to keep our custom metadata like 'time')
-                    if ticket_id in existing_active:
-                        trade = existing_active[ticket_id]
-                        trade["pnl"] = round(pnl, 2)
-                        trade["current_price"] = p.price_current
-                    else:
-                        # New trade detected directly from MT5
-                        trade = {
-                            "ticket": p.ticket,
-                            "symbol": p.symbol,
-                            "direction": "LONG" if p.type == mt5.POSITION_TYPE_BUY else "SHORT",
-                            "entry": p.price_open,
-                            "tp": p.tp,
-                            "sl": p.sl,
-                            "qty": p.volume,
-                            "pnl": round(pnl, 2),
-                            "status": "ACTIVE",
-                            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        # Calculate PnL: Use equity-balance for MT5, or sum active trades PnL for others
+                        if broker_id == "mt5":
+                            broker_pnl = equity - balance
+                        else:
+                            # Fallback: Sum PnL of active trades assigned to this broker or matching its assets
+                            # For simplicity, we sum all if this is the primary or it's crypto
+                            broker_pnl = sum(t.get("pnl", 0) for t in state.SHARED_DATA.get("active_trades", []))
+                        
+                        state.SHARED_DATA["broker_stats"][broker_id] = {
+                            "equity": round(equity, 2),
+                            "balance": round(balance, 2),
+                            "pnl": round(broker_pnl, 2),
+                            "last_update": datetime.now().strftime("%H:%M:%S")
                         }
-                    current_active.append(trade)
+                        
+                        # Sync main display if this is the default broker
+                        if broker_id == os.getenv("DEFAULT_BROKER", "mt5").lower():
+                            state.SHARED_DATA["balance"] = balance
+                            state.SHARED_DATA["equity"] = equity
                 except Exception as ex:
-                    log.error(f"Error processing position {p.ticket}: {ex}")
+                    log.error(f"Error fetching balance for {broker_id}: {ex}")
 
-            # 4. Check for trades that were in our list but are now gone from MT5 (Closed)
-            current_tickets = {str(p.ticket) for p in positions}
-            for ticket, trade in existing_active.items():
-                if ticket not in current_tickets:
-                    # Trade was closed externally (or via our button)
-                    trade["status"] = "CLOSED"
-                    trade["closed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    # Add to history if not already there
-                    if not any(str(h.get("ticket")) == ticket for h in history):
-                        history.insert(0, trade)
-            
-            state.SHARED_DATA["active_trades"] = current_active
-            state.SHARED_DATA["trade_history"] = history[:50]
-            
-            # 5. Periodically Save Equity Snapshot (Every 100 loops ~ 3 mins)
+            # 3. Sync MT5 Specific Positions (Special trailing logic)
+            adapter = executor.adapters.get("mt5")
+            if adapter:
+                positions = mt5.positions_get()
+                if positions:
+                    current_active = []
+                    history = state.SHARED_DATA.get("trade_history", [])
+                    existing_active = {str(t.get("ticket")): t for t in state.SHARED_DATA.get("active_trades", [])}
+
+                    for p in positions:
+                        ticket_id = str(p.ticket)
+                        pnl = p.profit + p.swap
+                        
+                        # --- [SMART TRAILING MONITOR (1:1 BE+ Logic)] ---
+                        if executor.risk_engine.config.enable_trailing_stop:
+                            is_long = p.type == mt5.POSITION_TYPE_BUY
+                            curr = p.price_current
+                            current_sl = p.sl
+                            
+                            # Get original entry/sl from state to calculate 1:1 RR distance
+                            orig_trade = existing_active.get(ticket_id)
+                            if orig_trade:
+                                orig_entry = float(orig_trade.get("entry", p.price_open))
+                                orig_sl = float(orig_trade.get("sl", current_sl))
+                                
+                                risk_dist = abs(orig_entry - orig_sl)
+                                prog_dist = abs(curr - orig_entry)
+                                
+                                # Check if 1:1 RR is reached (prog_dist >= risk_dist)
+                                in_profit = (curr > orig_entry) if is_long else (curr < orig_entry)
+                                if in_profit and prog_dist >= risk_dist and risk_dist > 0:
+                                    # Lock in 10% of risk distance as profit (dynamically scales to asset pip size)
+                                    lock_in_dist = risk_dist * 0.1
+                                    be_level = orig_entry + lock_in_dist if is_long else orig_entry - lock_in_dist
+                                    
+                                    # Only move SL if it's an improvement
+                                    if (is_long and current_sl < be_level) or (not is_long and (current_sl > be_level or current_sl == 0)):
+                                        log.info("🛡️ TRAILING STOP: Locking in BE+ for %s ticket %s", p.symbol, ticket_id)
+                                        adapter.modify_order(p.ticket, be_level, p.tp)
+                        
+                        if ticket_id in existing_active:
+                            trade = existing_active[ticket_id]
+                            trade["pnl"] = round(pnl, 2)
+                        else:
+                            trade = {
+                                "ticket": p.ticket, "symbol": p.symbol, "direction": "LONG" if p.type == mt5.POSITION_TYPE_BUY else "SHORT",
+                                "entry": p.price_open, "tp": p.tp, "sl": p.sl, "qty": p.volume, "pnl": round(pnl, 2),
+                                "status": "ACTIVE", "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            }
+                        current_active.append(trade)
+                    state.SHARED_DATA["active_trades"] = current_active
+
+            # 5. Periodically Save Equity Snapshot
             if not hasattr(pnl_update_loop, "counter"): pnl_update_loop.counter = 0
             pnl_update_loop.counter += 1
             if pnl_update_loop.counter >= 100:
                 pnl_update_loop.counter = 0
-                equity = state.SHARED_DATA.get("equity", state.SHARED_DATA.get("balance", 0))
+                equity = state.SHARED_DATA.get("equity", 0)
                 try:
                     from db_utils import get_db_connection
                     conn = get_db_connection()
@@ -630,10 +646,8 @@ async def pnl_update_loop():
                         cursor.execute("INSERT INTO equity_history (total_equity) VALUES (?)", (equity,))
                         conn.commit()
                         conn.close()
-                except Exception as e:
-                    log.error(f"Equity Log Error: {e}")
+                except: pass
 
-            # Broadcast update by saving state
             state.save_shared_state(state.SHARED_DATA)
 
         except Exception as e:
@@ -700,8 +714,8 @@ async def main_loop() -> None:
     # Warm up the executor so MT5 / other adapters connect before the first job
     get_executor()
 
-    # Launch Web Dashboard Server
-    log.info("🌐 Launching Mobile Web Dashboard on http://0.0.0.0:8000")
+    # Launch Web Dashboard Server (Internal API)
+    log.info("🌐 Launching Internal API on http://0.0.0.0:8000")
     
     # Pre-sync state
     state.SHARED_DATA["auto_trade"] = os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true"
@@ -710,7 +724,7 @@ async def main_loop() -> None:
     state.SHARED_DATA["risk_config"] = get_executor().risk_engine.config.dict()
     
     import web_server
-    web_thread = threading.Thread(target=web_server.run_server, daemon=True)
+    web_thread = threading.Thread(target=web_server.run_server, args=("0.0.0.0", 8000), daemon=True)
     web_thread.start()
     
     # Launch Scheduler Thread

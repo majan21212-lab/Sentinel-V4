@@ -436,6 +436,14 @@ class MT5Adapter(BaseExchangeAdapter):
         df = pd.DataFrame(rates)
         df['timestamp'] = pd.to_datetime(df['time'], unit='s')
         
+        # Price Sanitization for XAUUSDm (Exness Trial Doubling Bug)
+        if "XAUUSD" in symbol and not df.empty:
+            avg_close = df['close'].mean()
+            if avg_close > 3500: # Clearly doubled
+                log.info("🛡️ Price Sanitizer: Detected doubled Gold price (%s). Calibrating tape...", avg_close)
+                for col in ['open', 'high', 'low', 'close']:
+                    df[col] = df[col] / 2.0
+
         # Map MT5 specific columns to standard names
         if 'tick_volume' in df.columns:
             df.rename(columns={'tick_volume': 'volume'}, inplace=True)
@@ -518,25 +526,154 @@ class MT5Adapter(BaseExchangeAdapter):
 
 # ── Fleet Expansion Adapters (Stubs) ──────────────────────────────────────────
 
-class OKXAdapter(BaseExchangeAdapter):
+class BinanceAdapter(BaseExchangeAdapter):
     def __init__(self):
-        self.exchange = ccxt.okx({
-            "apiKey":          os.getenv("OKX_API_KEY"),
-            "secret":          os.getenv("OKX_SECRET_KEY"),
-            "password":        os.getenv("OKX_PASSWORD"),
-            "enableRateLimit": True,
-            "options":         {"defaultType": "swap"},
-        }) if os.getenv("OKX_API_KEY") else None
-        log.info("OKXAdapter initialised (swap mode).")
+        api_key = os.getenv("BINANCE_API_KEY")
+        secret = os.getenv("BINANCE_SECRET")
+        password = os.getenv("BINANCE_PASSWORD")
+        
+        if api_key and secret:
+            # Using Futures (USDS-M) by default as it's common for bots
+            self.exchange = ccxt.binance({
+                "apiKey":          api_key,
+                "secret":          secret,
+                "password":        password,
+                "enableRateLimit": True,
+                "options":         {"defaultType": "future"},
+            })
+            log.info("BinanceAdapter initialised (Futures mode).")
+        else:
+            self.exchange = None
+            log.warning("BinanceAdapter: Missing credentials, adapter dormant.")
 
-    def place_order(self, signal: dict) -> dict: return {"status": "error", "message": "OKX routing not implemented"}
+    def _map_symbol(self, symbol: str) -> str:
+        """Converts MT5 style symbols to Binance Futures format."""
+        s = symbol.replace("USDm", "").replace("USD", "")
+        if s == "XAU": return "GOLD/USDT" # Binance doesn't have XAU, but some use GOLD
+        if s == "NAS100": return "1000LUNC/USDT" # Placeholder mapping if needed
+        return f"{s}/USDT:USDT"
+
+    def place_order(self, signal: dict) -> dict: 
+        if not self.exchange: return {"status": "error", "message": "Binance not connected"}
+        try:
+            symbol = self._map_symbol(signal["symbol"])
+            side = "BUY" if signal["direction"] == "LONG" else "SELL"
+            amount = float(signal.get("qty", 0.001))
+            
+            # 1. Market Order
+            order = self.exchange.create_order(
+                symbol=symbol,
+                type="MARKET",
+                side=side,
+                amount=amount
+            )
+            
+            # 2. Attach TP/SL (Simplified for CCXT unified API)
+            try:
+                sl = float(signal.get("sl", 0))
+                tp = float(signal.get("tp1", signal.get("take_profit", 0)))
+                if sl > 0:
+                    self.exchange.create_order(
+                        symbol=symbol, type="STOP_MARKET", side="SELL" if side == "BUY" else "BUY",
+                        amount=amount, params={"stopPrice": sl}
+                    )
+                if tp > 0:
+                    self.exchange.create_order(
+                        symbol=symbol, type="TAKE_PROFIT_MARKET", side="SELL" if side == "BUY" else "BUY",
+                        amount=amount, params={"stopPrice": tp}
+                    )
+            except Exception as e:
+                log.warning(f"Binance TP/SL attach error: {e}")
+
+            return {"status": "success", "exchange": "binance", "order_id": order["id"]}
+        except Exception as e:
+            log.error(f"Binance Order Error: {e}")
+            return {"status": "error", "message": str(e)}
+        
     def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
-    def get_balance(self) -> dict: return {}
-    def get_active_symbols(self) -> list[str]: return []
+    def get_balance(self) -> dict: 
+        return self.exchange.fetch_balance() if self.exchange else {}
+    def get_active_symbols(self) -> list[str]: 
+        if not self.exchange: return []
+        try:
+            pos = self.exchange.fetch_positions()
+            return [p['symbol'] for p in pos if float(p.get('contracts', 0)) != 0]
+        except: return []
     def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
     def close_all_positions(self) -> dict: return {}
     def close_symbol_positions(self, symbol: str) -> dict: return {}
-    def is_connected(self) -> bool: return True
+    def is_connected(self) -> bool: 
+        if not self.exchange: return False
+        try:
+            self.exchange.fetch_status()
+            return True
+        except:
+            return False
+
+class OKXAdapter(BaseExchangeAdapter):
+    def __init__(self):
+        api_key = os.getenv("OKX_API_KEY")
+        secret = os.getenv("OKX_SECRET")
+        password = os.getenv("OKX_PASSWORD")
+        
+        if api_key and secret:
+            self.exchange = ccxt.okx({
+                "apiKey":          api_key,
+                "secret":          secret,
+                "password":        password,
+                "enableRateLimit": True,
+                "options":         {"defaultType": "swap"},
+            })
+            log.info("OKXAdapter initialised (swap mode).")
+        else:
+            self.exchange = None
+            log.warning("OKXAdapter: Missing credentials, adapter dormant.")
+
+    def _map_symbol(self, symbol: str) -> str:
+        """Converts MT5 style symbols to OKX Swap format."""
+        s = symbol.replace("USDm", "").replace("USD", "")
+        return f"{s}-USDT-SWAP"
+
+    def place_order(self, signal: dict) -> dict: 
+        if not self.exchange: return {"status": "error", "message": "OKX not connected"}
+        try:
+            symbol = self._map_symbol(signal["symbol"])
+            side = "buy" if signal["direction"] == "LONG" else "sell"
+            amount = float(signal.get("qty", 1)) # OKX contracts are often integers
+            
+            order = self.exchange.create_order(
+                symbol=symbol,
+                type="market",
+                side=side,
+                amount=amount,
+                params={
+                    "slTriggerPx": signal.get("sl"),
+                    "tpTriggerPx": signal.get("tp1", signal.get("take_profit"))
+                }
+            )
+            return {"status": "success", "exchange": "okx", "order_id": order["id"]}
+        except Exception as e:
+            log.error(f"OKX Order Error: {e}")
+            return {"status": "error", "message": str(e)}
+    def modify_order(self, ticket: str, new_sl: float, new_tp: float) -> dict: return {}
+    def get_balance(self) -> dict: 
+        return self.exchange.fetch_balance() if self.exchange else {}
+    def get_active_symbols(self) -> list[str]: 
+        if not self.exchange: return []
+        try:
+            pos = self.exchange.fetch_positions()
+            return [p['symbol'] for p in pos if float(p.get('contracts', 0)) != 0]
+        except: return []
+    def fetch_historical_data(self, symbol: str, timeframe: int, lookback: int): return pd.DataFrame()
+    def close_all_positions(self) -> dict: return {}
+    def close_symbol_positions(self, symbol: str) -> dict: return {}
+    def is_connected(self) -> bool: 
+        if not self.exchange: return False
+        try:
+            self.exchange.fetch_status()
+            return True
+        except:
+            return False
 
 class BybitAdapter(BaseExchangeAdapter):
     def __init__(self):
@@ -668,7 +805,62 @@ class ExecutionLayer:
             self.adapters["plus500"] = Plus500Adapter()
             
         if os.getenv("XTB_API_KEY"):
-            self.adapters["xtb"] = XTBAdapter()
+            try:
+                self.adapters["xtb"] = XTBAdapter()
+            except Exception as exc:
+                log.warning("XTBAdapter failed to initialise: %s", exc)
+
+        import state_manager as state
+        state.SHARED_DATA["active_adapters"] = list(self.adapters.keys())
+        state.save_shared_state(state.SHARED_DATA)
+
+    def aggregate_broker_stats(self) -> dict:
+        """
+        Polls all active adapters for their current balance and calculates 
+        floating PnL from the active trades tracked in shared state.
+        """
+        import state_manager as state
+        stats = {}
+        active_trades = state.SHARED_DATA.get("active_trades", [])
+        
+        for name, adapter in self.adapters.items():
+            try:
+                raw_bal = adapter.get_balance()
+                balance = 0.0
+                
+                if name == "binance":
+                    balance = float(raw_bal.get("total", {}).get("USDT", 0))
+                elif name == "okx":
+                    balance = float(raw_bal.get("total", {}).get("USDT", 0))
+                elif name == "mt5":
+                    balance = float(raw_bal.get("balance", 0))
+                elif name == "alpaca":
+                    balance = float(getattr(raw_bal, "balance", 0))
+                
+                # Calculate PnL for this specific broker
+                broker_pnl = 0.0
+                # If the adapter can fetch its own floating PnL, that's better
+                if name == "mt5":
+                    broker_pnl = float(raw_bal.get("equity", balance) - balance)
+                else:
+                    # Fallback: Sum PnL of active trades assigned to this broker in shared state
+                    # (This assumes trades are tagged or we just sum all if it's the primary)
+                    # For now, we'll use a simplified version:
+                    # If it's the primary broker, it gets the active_trades PnL
+                    broker_pnl = sum(t.get("pnl", 0) for t in active_trades) if name == os.getenv("DEFAULT_BROKER", "binance").lower() else 0.0
+
+                stats[name] = {
+                    "balance": round(balance, 2),
+                    "pnl": round(broker_pnl, 2),
+                    "status": "CONNECTED"
+                }
+            except Exception as e:
+                log.warning(f"Failed to fetch stats for {name}: {e}")
+                stats[name] = {"balance": 0, "pnl": 0, "status": "ERROR"}
+        
+        state.SHARED_DATA["broker_stats"] = stats
+        state.save_shared_state(state.SHARED_DATA)
+        return stats
 
     def place_trade(self, signal: Signal, platform: str = None) -> dict:
         """
@@ -830,8 +1022,26 @@ class ExecutionLayer:
         return results
 
     def close_symbol(self, symbol: str, platform: str = None) -> dict:
-        target = (platform or os.getenv("DEFAULT_BROKER", "binance")).lower()
+        """
+        Close all positions for a given symbol.
+        Priority: explicit platform > MT5 if active > DEFAULT_BROKER.
+        """
+        # If MT5 is active and has this symbol's position, always route there
+        if not platform and "mt5" in self.adapters:
+            try:
+                positions = mt5.positions_get(symbol=symbol)
+                if positions:
+                    log.info(f"close_symbol: routing {symbol} to MT5 (found {len(positions)} position(s))")
+                    res = self.adapters["mt5"].close_symbol_positions(symbol)
+                    if res.get("status") == "success":
+                        notifier.send_message(f"🛑 *Position Closed*\n{symbol} manually closed from dashboard.")
+                    return res
+            except Exception as e:
+                log.warning(f"close_symbol MT5 lookup failed: {e}")
+
+        # Fallback to explicit platform or DEFAULT_BROKER
+        target = (platform or os.getenv("DEFAULT_BROKER", "mt5")).lower()
         adapter = self.adapters.get(target)
         if not adapter:
-            return {"status": "error", "message": f"Adapter {target} not active"}
+            return {"status": "error", "message": f"Adapter '{target}' not active. Check .env credentials."}
         return adapter.close_symbol_positions(symbol)

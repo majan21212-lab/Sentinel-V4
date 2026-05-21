@@ -1,4 +1,4 @@
-# 🚀 Sentinel-V4 VPS Deployment Guide (IP: 34.26.143.224)
+# 🚀 Sentinel-V4 VPS Deployment Guide (IP: 35.184.162.126)
 
 This document is for the USER and the Antigravity instance on the remote VPS.
 
@@ -17,7 +17,7 @@ Run the `setup_vps.ps1` script located in this directory. It will:
 - Create a 'Sentinel' background task to keep the bot running 24/7.
 
 ## 3. Web Interface Access
-- URL: `http://34.26.143.224:8000`
+- URL: `http://35.184.162.126:8000`
 - To enable HTTPS/SSL, use the provided Nginx config.
 
 ## 4. Security Checklist

@@ -8,8 +8,8 @@ import '../models/trade_models.dart';
 /// Endpoint: http://34.27.93.107:8080
 class ApiService {
   // ── Live VPS Bot Endpoints ───────────────────────────────────────────
-  static const String baseUrl = "http://34.26.143.224:8000";
-  static const String wsUrl   = "ws://34.26.143.224:8000/ws";
+  static const String baseUrl = "http://35.184.162.126:8000";
+  static const String wsUrl   = "ws://35.184.162.126:8000/ws";
 
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;

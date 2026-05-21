@@ -34,28 +34,46 @@ def run_backtest(symbol='BTC/USDT', timeframe='1h', limit=1000, req_score=7):
             sl = signal['stop_loss']
             trade_type = signal['type']
             
-            result = None
-            exit_bar = None
+            locked_in = False
+            exit_price = None
             
             for j in range(i+1, len(df)):
                 curr_bar = df.iloc[j]
                 
                 if trade_type == 'LONG':
+                    # Check 1:1 Risk-to-Reward to trigger break-even
+                    risk_dist = entry_price - sl
+                    one_to_one = entry_price + risk_dist
+                    if not locked_in and curr_bar['high'] >= one_to_one:
+                        sl = entry_price + 10  # lock in +10
+                        locked_in = True
+                    
                     if curr_bar['low'] <= sl:
-                        result = 'SL'
+                        result = 'SL' if not locked_in else 'BE+'
+                        exit_price = sl
                         exit_bar = j
                         break
                     if curr_bar['high'] >= tp:
                         result = 'TP'
+                        exit_price = tp
                         exit_bar = j
                         break
                 elif trade_type == 'SHORT':
+                    # Check 1:1 Risk-to-Reward to trigger break-even
+                    risk_dist = sl - entry_price
+                    one_to_one = entry_price - risk_dist
+                    if not locked_in and curr_bar['low'] <= one_to_one:
+                        sl = entry_price - 10  # lock in +10
+                        locked_in = True
+
                     if curr_bar['high'] >= sl:
-                        result = 'SL'
+                        result = 'SL' if not locked_in else 'BE+'
+                        exit_price = sl
                         exit_bar = j
                         break
                     if curr_bar['low'] <= tp:
                         result = 'TP'
+                        exit_price = tp
                         exit_bar = j
                         break
             
@@ -64,8 +82,7 @@ def run_backtest(symbol='BTC/USDT', timeframe='1h', limit=1000, req_score=7):
                     'entry_time': df.iloc[i]['timestamp'],
                     'type': trade_type,
                     'entry': entry_price,
-                    'sl': sl,
-                    'tp': tp,
+                    'exit_price': exit_price,
                     'result': result,
                     'exit_time': df.iloc[exit_bar]['timestamp'],
                     'score': signal['score']
@@ -93,4 +110,4 @@ def run_backtest(symbol='BTC/USDT', timeframe='1h', limit=1000, req_score=7):
     return report_df
 
 if __name__ == "__main__":
-    run_backtest(limit=1000)
+    run_backtest(timeframe='15m', limit=4500, req_score=8)

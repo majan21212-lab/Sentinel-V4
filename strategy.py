@@ -239,6 +239,15 @@ def calculate_indicators(df, symbol):
         df['bull_hybrid_mom'] = False
         df['bear_hybrid_mom'] = False
 
+    # 15. SATS Dynamic Engine (ER & Volatility Ratio)
+    change = (df['close'] - df['close'].shift(10)).abs()
+    volatility = df['close'].diff().abs().rolling(10).sum()
+    df['er'] = (change / volatility.replace(0, np.nan)).fillna(0)
+    
+    raw_atr = _atr(df['high'], df['low'], df['close'], length=14)
+    atr_sma = raw_atr.rolling(100).mean()
+    df['volRatio'] = (raw_atr / atr_sma.replace(0, np.nan)).fillna(1.0)
+
     # Reset index back for subsequent processing if needed
     df.reset_index(inplace=True)
     return df
@@ -279,9 +288,11 @@ def check_signals(df, symbol, req_score=8):
         if current.get(bull_f): long_pts += 1
         if current.get(bear_f): short_pts += 1
 
-    # Signal Logic: Score >= threshold AND price crossover baseline
-    long_cond = (long_pts >= req_score) and (current['close'] > current['baseline']) and (prev['close'] <= prev['baseline'])
-    short_cond = (short_pts >= req_score) and (current['close'] < current['baseline']) and (prev['close'] >= prev['baseline'])
+    # Signal Logic: Score >= threshold
+    # We remove the hard requirement for an exact baseline crossover on the same candle,
+    # because the baseline is already Factor 2. The high score will ensure confluence.
+    long_cond = (long_pts >= req_score)
+    short_cond = (short_pts >= req_score)
 
     signal = None
     atr = _atr(df['high'], df['low'], df['close'], length=14).iloc[-1]
@@ -293,10 +304,26 @@ def check_signals(df, symbol, req_score=8):
     prior_swing_high = current.get('prior_swing_high', current['high'])
     if pd.isna(prior_swing_high): prior_swing_high = current['high']
 
+    # SATS Dynamic TP Scaling
+    def clamp(val, minv, maxv): return max(minv, min(val, maxv))
+    def mapClamp(val, inLo, inHi, outLo, outHi):
+        t = clamp((val - inLo) / (inHi - inLo + 1e-9), 0.0, 1.0)
+        return outLo + t * (outHi - outLo)
+
+    er = current.get('er', 0.5)
+    volRatio = current.get('volRatio', 1.0)
+    tqiComp = clamp(er, 0.0, 1.0)
+    volComp = clamp(mapClamp(volRatio, 0.5, 2.0, 0.0, 1.0), 0.0, 1.0)
+    
+    tqiWeight, volWeight = 0.6, 0.4
+    rawScale = (tqiComp * tqiWeight + volComp * volWeight) / (tqiWeight + volWeight)
+    dynScale = 0.5 + rawScale * (2.0 - 0.5)  # minScale=0.5, maxScale=2.0
+    dyn_rr = 2.0 * dynScale  # Default base RR is 2.0
+
     if long_cond:
         # Long SL: Min of current low or prior swing low, minus ATR buffer
         sl = min(current['low'], prior_swing_low) - (atr * 0.5)
-        tp = current['close'] + (current['close'] - sl) * 2.0
+        tp = current['close'] + (current['close'] - sl) * dyn_rr
         signal = {
             'type': 'LONG',
             'symbol': symbol,
@@ -304,13 +331,13 @@ def check_signals(df, symbol, req_score=8):
             'stop_loss': sl,
             'take_profit': tp,
             'score': long_pts,
-            'reason': f'God-Mode Score: {long_pts}/14'
+            'reason': f'God-Mode Score: {long_pts}/14 (DynTP Scale: {dynScale:.2f})'
         }
 
     elif short_cond:
         # Short SL: Max of current high or prior swing high, plus ATR buffer
         sl = max(current['high'], prior_swing_high) + (atr * 0.5)
-        tp = current['close'] - (sl - current['close']) * 2.0
+        tp = current['close'] - (sl - current['close']) * dyn_rr
         signal = {
             'type': 'SHORT',
             'symbol': symbol,
@@ -318,7 +345,7 @@ def check_signals(df, symbol, req_score=8):
             'stop_loss': sl,
             'take_profit': tp,
             'score': short_pts,
-            'reason': f'God-Mode Score: {short_pts}/14'
+            'reason': f'God-Mode Score: {short_pts}/14 (DynTP Scale: {dynScale:.2f})'
         }
 
     return signal

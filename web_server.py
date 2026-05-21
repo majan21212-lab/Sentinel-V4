@@ -44,13 +44,8 @@ app.add_middleware(
 # Middleware to handle the /web-api prefix from the frontend build
 @app.middleware("http")
 async def strip_web_api_prefix(request: Request, call_next):
-    if request.url.path.startswith("/web-api"):
-        new_scope = request.scope.copy()
-        new_scope['path'] = request.scope['path'].replace("/web-api", "", 1)
-        # Create a new request with the modified scope
-        from starlette.requests import Request as StarletteRequest
-        new_request = StarletteRequest(new_scope)
-        return await call_next(new_request)
+    if request.scope['path'].startswith("/web-api"):
+        request.scope['path'] = request.scope['path'].replace("/web-api", "", 1)
     return await call_next(request)
 
 from dotenv import load_dotenv
@@ -180,25 +175,123 @@ async def get_performance():
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.get("/api/analytics")
-async def get_analytics():
-    """Returns win-rate analytics grouped by pattern."""
+@app.get("/account")
+async def get_account_summary():
+    """iOS App Endpoint: Returns account summaries for all active brokers."""
+    stats = SHARED_DATA.get("broker_stats", {})
+    active_trades = SHARED_DATA.get("active_trades", [])
+    
+    results = {}
+    # Ensure default MT5 exists even if not in stats
+    if "mt5" not in stats:
+        results["mt5"] = {
+            "equity": SHARED_DATA.get("equity", 0),
+            "balance": SHARED_DATA.get("balance", 0),
+            "available": SHARED_DATA.get("balance", 0),
+            "openPositions": len(active_trades)
+        }
+        
+    for broker, data in stats.items():
+        results[broker] = {
+            "equity": data.get("equity", 0),
+            "balance": data.get("balance", 0),
+            "available": data.get("balance", 0),
+            "openPositions": len([t for t in active_trades if t.get("broker", "").lower() == broker.lower() or (broker.lower() == "mt5" and not t.get("broker"))])
+        }
+    return JSONResponse(content=results)
+
+@app.get("/history")
+async def get_ios_history():
+    """iOS App Endpoint: Returns signal history in the format expected by TradeSignal model."""
     try:
         from db_utils import get_db_connection
         conn = get_db_connection()
-        if not conn: return JSONResponse(content={})
+        if not conn: return JSONResponse(content=[])
+        
+        query = "SELECT symbol, direction, entry_price as entry, stop_loss as sl, take_profit as tp, score, pattern, created_at as timestamp FROM signals ORDER BY id DESC LIMIT 50"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        results = []
+        for _, row in df.iterrows():
+            results.append({
+                "symbol": row['symbol'],
+                "direction": row['direction'],
+                "entry": float(row['entry'] or 0),
+                "sl": float(row['sl'] or 0),
+                "tp": float(row['tp'] or 0),
+                "score": float(row['score'] or 0),
+                "pattern": row['pattern'] or "Unknown",
+                "timestamp": row['timestamp']
+            })
+        return JSONResponse(content=results)
+    except:
+        return JSONResponse(content=[])
+
+@app.get("/positions")
+async def get_ios_positions():
+    """iOS App Endpoint: Returns active positions for the mobile dashboard."""
+    active_trades = SHARED_DATA.get("active_trades", [])
+    results = []
+    for t in active_trades:
+        results.append({
+            "symbol": t.get("symbol"),
+            "entryPrice": t.get("entry"),
+            "markPrice": SHARED_DATA.get("prices", {}).get(t.get("symbol"), t.get("entry")),
+            "size": t.get("qty", 0.01),
+            "pnl": t.get("pnl", 0.0),
+            "direction": t.get("direction"),
+            "broker": t.get("broker", "MT5")
+        })
+    return JSONResponse(content=results)
+
+@app.get("/api/pnl_history")
+async def get_pnl_history(days: int = 1):
+    """iOS App Endpoint: Returns equity history points."""
+    try:
+        from db_utils import get_db_connection
+        conn = get_db_connection()
+        if not conn: return JSONResponse(content=[])
+        
+        query = "SELECT total_equity as equity, timestamp as time FROM equity_history ORDER BY id DESC LIMIT 100"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        return JSONResponse(content=df.iloc[::-1].to_dict(orient='records'))
+    except:
+        return JSONResponse(content=[])
+
+@app.get("/api/leaderboard")
+async def get_leaderboard():
+    """iOS App Endpoint: Returns pattern success stats."""
+    try:
+        from db_utils import get_db_connection
+        conn = get_db_connection()
+        if not conn: return JSONResponse(content=[])
+        
         query = "SELECT pattern, COUNT(*) as total, SUM(CASE WHEN outcome = 1 THEN 1 ELSE 0 END) as wins FROM signals WHERE outcome != 0 GROUP BY pattern"
         df = pd.read_sql_query(query, conn)
         conn.close()
-        if df.empty: return JSONResponse(content={})
-        df['accuracy'] = (df['wins'] / df['total'] * 100).round(1)
-        return JSONResponse(content=df.set_index('pattern')['accuracy'].to_dict())
+        
+        results = []
+        for _, row in df.iterrows():
+            total = int(row['total'])
+            wins = int(row['wins'] or 0)
+            losses = total - wins
+            results.append({
+                "pattern": row['pattern'],
+                "total": total,
+                "wins": wins,
+                "losses": losses,
+                "win_rate": round(wins/total * 100, 1) if total > 0 else 0
+            })
+        return JSONResponse(content=results)
     except:
-        return JSONResponse(content={})
+        return JSONResponse(content=[])
 
 @app.get("/")
 async def get_index():
-    response = FileResponse(get_resource_path("Elirox/index.html"))
+    response = FileResponse(get_resource_path("../../dist/index.html"))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -209,149 +302,223 @@ async def get_status():
     return JSONResponse(content=SHARED_DATA)
 
 @app.get("/api/signals")
-async def get_signals():
-    """Returns historical signals with full trade intelligence data including calculated P&L."""
+async def get_signals(limit: int = 50):
+    """
+    Returns deduplicated signals with real P&L.
+    - ACTIVE: latest outcome=0 record per symbol that has a live MT5 position
+    - Closed:  latest outcome!=0 record per symbol  (most recent trade result)
+    - Open outcome=0 records with no MT5 position are silently skipped
+      (they were likely closed outside the dashboard or are stale).
+    """
     try:
         from db_utils import get_db_connection
         conn = get_db_connection()
-        if not conn: return JSONResponse(content=[])
-        
-        query = """
-            SELECT id, symbol, direction, entry_price as entry, take_profit as tp, 
-                   stop_loss as sl, pattern, score, ml_confidence as confidence, 
-                   created_at as time, outcome, ai_rationale
-            FROM signals 
-            ORDER BY id DESC 
-            LIMIT 50
+        if not conn:
+            return JSONResponse(content=[])
+
+        COLS = """s.id, s.symbol, s.direction, s.entry_price AS entry,
+                  s.take_profit AS tp, s.stop_loss AS sl, s.pattern,
+                  s.score, s.ml_confidence AS confidence,
+                  s.created_at AS time, s.outcome, s.ai_rationale, s.broker"""
+
+        # ── 1. Latest open signal per symbol ──────────────────────────────
+        open_q = f"""
+            SELECT {COLS}
+            FROM signals s
+            INNER JOIN (
+                SELECT symbol, MAX(id) AS max_id
+                FROM signals WHERE outcome = 0
+                GROUP BY symbol
+            ) lx ON s.id = lx.max_id
         """
-        df = pd.read_sql_query(query, conn)
+        # ── 2. Latest closed signal per symbol ────────────────────────────
+        closed_q = f"""
+            SELECT {COLS}
+            FROM signals s
+            INNER JOIN (
+                SELECT symbol, MAX(id) AS max_id
+                FROM signals WHERE outcome != 0
+                GROUP BY symbol
+            ) lx ON s.id = lx.max_id
+        """
+
+        import pandas as pd
+        df_open   = pd.read_sql_query(open_q,   conn)
+        df_closed = pd.read_sql_query(closed_q, conn)
         conn.close()
 
-        # Replace ALL NaN values — string NaN columns also break JSON serialization
-        df = df.where(pd.notna(df), None)
-        df['score']      = pd.to_numeric(df['score'],      errors='coerce').fillna(0)
-        df['confidence'] = pd.to_numeric(df['confidence'], errors='coerce').fillna(0)
-        df['entry']      = pd.to_numeric(df['entry'],      errors='coerce').fillna(0)
-        df['tp']         = pd.to_numeric(df['tp'],         errors='coerce').fillna(0)
-        df['sl']         = pd.to_numeric(df['sl'],         errors='coerce').fillna(0)
-        df['outcome']    = pd.to_numeric(df['outcome'],    errors='coerce').fillna(0).astype(int)
-        df['pattern']    = df['pattern'].fillna('Unknown Pattern')
-        df['time']       = df['time'].fillna('N/A')
+        def clean(df):
+            # Replace ALL NaN (float nan) with None first, then fill per column
+            df = df.where(pd.notna(df), None)
+            # Numeric columns
+            for col in ['score', 'confidence', 'entry', 'tp', 'sl']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            df['outcome'] = pd.to_numeric(df['outcome'], errors='coerce').fillna(0).astype(int)
+            # String columns — replace None/NaN with safe defaults
+            df['pattern']      = df['pattern'].apply(lambda x: x if isinstance(x, str) else 'SMC')
+            df['time']         = df['time'].apply(lambda x: x if isinstance(x, str) else 'N/A')
+            df['ai_rationale'] = df['ai_rationale'].apply(lambda x: x if isinstance(x, str) else 'SMC TECHNICAL FLOW')
+            df['broker']       = df['broker'].apply(lambda x: x if isinstance(x, str) else 'MT5')
+            df['symbol']       = df['symbol'].apply(lambda x: x if isinstance(x, str) else 'UNKNOWN')
+            df['direction']    = df['direction'].apply(lambda x: x if isinstance(x, str) else 'LONG')
+            return df
 
-        if df.empty:
-            return JSONResponse(content=SHARED_DATA.get("signals", []))
+        df_open   = clean(df_open)
+        df_closed = clean(df_closed)
 
+        # Live positions from MT5
+        live_pnl = {t.get("symbol", ""): t.get("pnl", 0)
+                    for t in SHARED_DATA.get("active_trades", [])}
+        live_syms = set(live_pnl.keys())
 
-        # Build a lookup of live trade PnL from active_trades and trade_history
-        live_pnl_lookup = {}
-        for t in SHARED_DATA.get("active_trades", []):
-            live_pnl_lookup[t.get("symbol", "")] = t.get("pnl", 0)
+        def pnl_from_tp_sl(entry, tp, sl, outcome, direction, symbol):
+            """Dollar P&L based on outcome vs TP/SL distance (0.01 lot)."""
+            lot = 0.01
+            is_long = direction.upper() in ('LONG', 'BUY')
+            if outcome == 1:      # win → hit TP
+                diff = (tp - entry) if is_long else (entry - tp)
+            elif outcome == -1:   # loss → hit SL
+                diff = (sl - entry) if is_long else (entry - sl)
+            else:
+                return None
 
-        def estimate_profit(row):
-            """Estimate dollar profit for a signal based on outcome, TP/SL, and contract rules."""
-            entry = row.get('entry') or 0
-            tp = row.get('tp') or 0
-            sl = row.get('sl') or 0
-            outcome = row.get('outcome', 0)
-            symbol = row.get('symbol', '')
-            direction = (row.get('direction') or '').upper()
-            lot = 0.01  # default minimum lot
-
-            if outcome == 0:
-                # Still running — check live PnL from MT5
-                live = live_pnl_lookup.get(symbol)
-                if live is not None:
-                    return round(live, 2), True
-                return None, True  # running but no data yet
-
-            # Calculate pip distance
-            if outcome == 1:   # Win — hit TP
-                diff = (tp - entry) if direction in ('LONG', 'BUY') else (entry - tp)
-            else:              # Loss — hit SL
-                diff = (sl - entry) if direction in ('LONG', 'BUY') else (entry - sl)
-
-            # Contract size by instrument type
-            if 'XAU' in symbol or 'GOLD' in symbol:
-                pnl = diff * 100 * lot
-            elif 'BTC' in symbol:
-                pnl = diff * lot
-            elif 'ETH' in symbol:
-                pnl = diff * lot
-            elif 'XRP' in symbol:
-                pnl = diff * lot
-            elif 'US30' in symbol or 'DJ' in symbol:
-                pnl = diff * 1 * lot
-            elif 'JPY' in symbol:
-                pnl = (diff * 100000 * lot) / max(entry, 1)
-            else:  # Standard forex
-                pnl = diff * 100000 * lot
-
-            return round(pnl, 2), False
+            sym = symbol.upper()
+            if any(x in sym for x in ['XAU', 'GOLD']): pnl = diff * 100 * lot
+            elif 'XAG'  in sym:                         pnl = diff * 5000 * lot
+            elif 'BTC'  in sym:                         pnl = diff * lot
+            elif any(x in sym for x in ['ETH','SOL','XRP','BNB','ADA',
+                                         'DOT','LINK','LTC','DOGE','AVAX']): pnl = diff * lot
+            elif 'JPY'  in sym:                         pnl = (diff * 100000 * lot) / max(entry, 1)
+            elif any(x in sym for x in ['US30','NAS','SPX','GER','UK1']): pnl = diff * lot
+            else:                                        pnl = diff * 100000 * lot
+            return round(pnl, 2)
 
         results = []
-        for _, row in df.iterrows():
-            pnl_value, is_running = estimate_profit(row)
 
-            if is_running:
-                if pnl_value is not None:
-                    pnl_display = f"{'+' if pnl_value >= 0 else ''}${pnl_value:.2f}"
-                    pnl_status = "running"
-                else:
-                    pnl_display = "LIVE"
-                    pnl_status = "running"
-            elif pnl_value is not None:
-                pnl_display = f"{'+' if pnl_value >= 0 else ''}${pnl_value:.2f}"
-                pnl_status = "win" if pnl_value >= 0 else "loss"
+        # ── Active signals ─────────────────────────────────────────────────
+        for _, row in df_open.iterrows():
+            sym = row['symbol']
+            if sym not in live_syms:
+                continue  # no open MT5 position for this signal → skip
+            live = live_pnl[sym]
+            pnl_display = f"{'+' if live >= 0 else ''}${live:.2f}"
+            results.append({
+                "id":           f"SIG-{row['id']}",
+                "symbol":       sym,
+                "action":       row['direction'],
+                "direction":    row['direction'],
+                "price":        row['entry'],
+                "entry":        row['entry'],
+                "tp":           row['tp'],
+                "sl":           row['sl'],
+                "pattern":      row['pattern'],
+                "score":        f"{int(float(row['score'] or 0))}/100",
+                "confidence":   f"{int(float(row['confidence'] or 0)*100)}%",
+                "status":       "ACTIVE",
+                "timestamp":    row['time'],
+                "profit":       pnl_display,
+                "pnl_status":   "running",
+                "ai_rationale": row.get('ai_rationale') or 'SMC TECHNICAL FLOW',
+                "broker":       row.get('broker') or 'MT5',
+            })
+
+        # ── Closed signals ─────────────────────────────────────────────────
+        seen_closed = set()
+        for _, row in df_closed.sort_values('id', ascending=False).iterrows():
+            sym     = row['symbol']
+            outcome = int(row['outcome'])
+            if sym in seen_closed:
+                continue
+            seen_closed.add(sym)
+
+            if outcome == -2:
+                pnl_display = 'AI BLOCKED'
+                pnl_status  = 'none'
             else:
-                pnl_display = "-"
-                pnl_status = "none"
+                val = pnl_from_tp_sl(
+                    float(row['entry'] or 0), float(row['tp'] or 0),
+                    float(row['sl'] or 0), outcome,
+                    str(row['direction'] or ''), sym
+                )
+                if val is not None:
+                    pnl_display = f"{'+' if val >= 0 else ''}${abs(val):.2f}"
+                    pnl_status  = 'win' if val >= 0 else 'loss'
+                else:
+                    pnl_display = '—'
+                    pnl_status  = 'none'
 
             results.append({
-                "id": f"SIG-{row['id']}",
-                "symbol": row['symbol'],
-                "action": row['direction'],
-                "price": row['entry'],
-                "tp": row['tp'],
-                "sl": row['sl'],
-                "pattern": row['pattern'],
-                "score": f"{int(float(row['score'] or 0))}/100",
-                "confidence": f"{int(float(row['confidence'] or 0)*100)}%",
-                "status": "Closed" if row['outcome'] != 0 else "Open",
-                "timestamp": row['time'],
-                "profit": pnl_display,
-                "pnl_status": pnl_status,
-                "ai_rationale": row.get('ai_rationale')
+                "id":           f"SIG-{row['id']}",
+                "symbol":       sym,
+                "action":       row['direction'],
+                "direction":    row['direction'],
+                "price":        row['entry'],
+                "entry":        row['entry'],
+                "tp":           row['tp'],
+                "sl":           row['sl'],
+                "pattern":      row['pattern'],
+                "score":        f"{int(float(row['score'] or 0))}/100",
+                "confidence":   f"{int(float(row['confidence'] or 0)*100)}%",
+                "status":       'REJECTED' if outcome == -2 else 'Closed',
+                "timestamp":    row['time'],
+                "profit":       pnl_display,
+                "pnl_status":   pnl_status,
+                "ai_rationale": row.get('ai_rationale') or 'SMC TECHNICAL FLOW',
+                "broker":       row.get('broker') or 'MT5',
             })
-        return JSONResponse(content=results)
+
+        # Sort: ACTIVE first, then Closed by id desc
+        results.sort(key=lambda x: (0 if x['status'] == 'ACTIVE' else 1,
+                                    -int(str(x['id']).replace('SIG-', '') or 0)))
+
+        return JSONResponse(content=results[:limit])
+
     except Exception as e:
-        logger.error(f"Signal Intel Error: {e}")
+        logger.error(f"Signal Intel Error: {e}", exc_info=True)
         return JSONResponse(content=SHARED_DATA.get("signals", []))
+
+
 
 # --- AUTH SYSTEM ---
 SECRET_KEY = "fleet_command_secure_key_2026"
-USERS = {"admin": "admin"} # Default credentials
 
 @app.post("/api/auth/login")
 async def login(request: Request):
-    data = await request.json()
-    username = data.get("username")
-    password = data.get("password")
-    
-    if USERS.get(username) == password:
-        # Simple token for local demo
-        token = f"fleet_{username}_{int(time.time())}"
-        return JSONResponse(content={"token": token, "user": {"username": username, "role": "Commander"}})
-    
-    raise HTTPException(status_code=401, detail="Invalid credentials")
+    try:
+        data = await request.json()
+        logger.info(f"🔑 LOGIN ATTEMPT: User '{data.get('username')}'")
+        
+        req_user = data.get("username", "")
+        req_pass = data.get("password", "")
+        
+        profile = state.SHARED_DATA.get("user_profile", {})
+        valid_user = profile.get("username", "admin")
+        valid_pass = profile.get("password", "password123")
+        
+        if req_user == valid_user and req_pass == valid_pass:
+            token = f"fleet_{valid_user}_{int(time.time())}"
+            logger.info(f"✅ AUTH GRANTED: Returning token for {valid_user}")
+            return JSONResponse(content={
+                "token": token, 
+                "user": {
+                    "username": valid_user, 
+                    "role": "Commander",
+                    "access": "full"
+                }
+            })
+        else:
+            logger.warning(f"❌ AUTH FAILED: Invalid credentials for {req_user}")
+            return JSONResponse(status_code=401, content={"status": "error", "message": "Invalid username or password"})
+            
+    except Exception as e:
+        logger.warning(f"🔑 LOGIN ATTEMPT ERROR: {e}")
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Bad request"})
 
 @app.get("/api/auth/me")
 async def get_me(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer fleet_"):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    username = auth_header.split("_")[1]
-    return JSONResponse(content={"username": username, "role": "Commander"})
+    profile = state.SHARED_DATA.get("user_profile", {})
+    return JSONResponse(content={"username": profile.get("username", "admin"), "role": "Commander"})
 
 # --- LOG STREAMING ---
 @app.get("/api/logs")
@@ -388,6 +555,10 @@ async def update_settings(request: Request):
         state.SHARED_DATA["risk_config"].update(data["risk_config"])
         
     # Identity & Notifications
+    if "user_profile" in data:
+        if "user_profile" not in state.SHARED_DATA: state.SHARED_DATA["user_profile"] = {}
+        state.SHARED_DATA["user_profile"].update(data["user_profile"])
+        
     if "telegram_token" in data: state.SHARED_DATA["telegram_token"] = data["telegram_token"]
     if "telegram_chat_id" in data: state.SHARED_DATA["telegram_chat_id"] = data["telegram_chat_id"]
     
@@ -431,10 +602,20 @@ async def update_settings(request: Request):
         for broker, keys in creds.items():
             os.environ[f"{broker.upper()}_API_KEY"] = keys["key"]
             os.environ[f"{broker.upper()}_SECRET"] = keys["secret"]
+            if keys.get("passphrase"):
+                os.environ[f"{broker.upper()}_PASSWORD"] = keys["passphrase"]
+            
             # Persistence
             with open(".env", "a") as f:
                 f.write(f"\n{broker.upper()}_API_KEY={keys['key']}")
                 f.write(f"\n{broker.upper()}_SECRET={keys['secret']}")
+                if keys.get("passphrase"):
+                    f.write(f"\n{broker.upper()}_PASSWORD={keys['passphrase']}")
+        
+        # Trigger immediate re-initialisation of adapters
+        executor = state.get_executor()
+        if executor:
+            executor.reconnect_all()
     
     # Update Engine State
     executor = state.get_executor()
@@ -475,7 +656,13 @@ async def broadcast_data():
                     "timestamp": datetime.now().strftime("%H:%M:%S"),
                     "data": state.SHARED_DATA
                 }
-                payload_json = json.dumps(payload)
+                import math
+                def json_default(obj):
+                    if isinstance(obj, float):
+                        if math.isnan(obj) or math.isinf(obj):
+                            return 0.0
+                    return str(obj)
+                payload_json = json.dumps(payload, default=json_default)
                 disconnected = set()
                 for ws in list(FLEET_SUBSCRIBERS):
                     try:
@@ -559,9 +746,86 @@ async def trigger_action(request: Request):
             return JSONResponse(content={"status": "success", "message": f"{broker} has been disconnected."})
             
         elif action == "close_trade":
-            trade_id = data.get("trade_id")
-            logger.warning(f"Closing trade {trade_id} manually from dashboard")
-            return JSONResponse(content={"status": "success", "message": f"Closed trade {trade_id}"})
+            trade_id = str(data.get("trade_id", ""))
+            symbol   = data.get("symbol", "")
+            logger.warning(f"🛑 Manual close requested — trade_id={trade_id} symbol={symbol}")
+            
+            active_trades = SHARED_DATA.get("active_trades", [])
+            
+            # Find the matching trade to get its symbol
+            matched = None
+            for t in active_trades:
+                if str(t.get("ticket", "")) == trade_id or t.get("symbol") == symbol:
+                    matched = t
+                    break
+            
+            # Also try matching the SIG- id against the signal list
+            if not matched and not symbol:
+                sig_num = trade_id.replace("SIG-", "")
+                for t in active_trades:
+                    if str(t.get("ticket", "")).endswith(sig_num[-4:]):
+                        matched = t
+                        break
+            
+            if not matched and not symbol:
+                logger.error(f"close_trade: could not find trade for id={trade_id}")
+                return JSONResponse(status_code=404, content={"status": "error", "message": f"Active trade not found for id {trade_id}"})
+            
+            close_symbol = symbol or (matched.get("symbol") if matched else None)
+            if not close_symbol:
+                return JSONResponse(status_code=400, content={"status": "error", "message": "Cannot determine symbol to close"})
+            
+            # Capture PnL before calling MT5 close
+            closed_pnl = float(matched.get("pnl", 0)) if matched else 0.0
+
+            executor = state.get_executor()
+            res = executor.close_symbol(close_symbol)
+            
+            if res.get("status") == "success":
+                if matched:
+                    matched["status"] = "CLOSED"
+                    matched["closed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    history = SHARED_DATA.get("trade_history", [])
+                    history.insert(0, matched)
+                    SHARED_DATA["trade_history"] = history[:50]
+                
+                SHARED_DATA["active_trades"] = [t for t in active_trades if t.get("symbol") != close_symbol]
+
+                # ── Update in-memory signals so WebSocket push reflects close ─
+                pnl_display = f"{'+' if closed_pnl >= 0 else ''}${abs(closed_pnl):.2f}"
+                updated_sigs = []
+                for sig in SHARED_DATA.get("signals", []):
+                    if sig.get("symbol") == close_symbol and sig.get("status") in ("ACTIVE", "Open", "LIVE"):
+                        sig = dict(sig)
+                        sig["status"] = "Closed"
+                        sig["profit"] = pnl_display
+                        sig["pnl_status"] = "win" if closed_pnl >= 0 else "loss"
+                    updated_sigs.append(sig)
+                SHARED_DATA["signals"] = updated_sigs
+
+                # ── Write outcome to SQLite ───────────────────────────────────
+                try:
+                    from db_utils import get_db_connection
+                    conn = get_db_connection()
+                    if conn:
+                        outcome = 1 if closed_pnl >= 0 else -1
+                        conn.execute(
+                            "UPDATE signals SET outcome = ? WHERE symbol = ? AND outcome = 0",
+                            (outcome, close_symbol)
+                        )
+                        conn.commit()
+                        conn.close()
+                        logger.info(f"DB updated: {close_symbol} → outcome={outcome} ({pnl_display})")
+                except Exception as db_err:
+                    logger.warning(f"DB update after close failed: {db_err}")
+
+                state.save_shared_state(SHARED_DATA)
+                logger.info(f"✅ Trade closed: {close_symbol} PnL={pnl_display}")
+                return JSONResponse(content={"status": "success", "message": f"Position {close_symbol} closed", "pnl": closed_pnl})
+            else:
+                msg = res.get("message", "Broker rejected close order")
+                logger.error(f"❌ Close failed for {close_symbol}: {msg}")
+                return JSONResponse(status_code=500, content={"status": "error", "message": msg})
             
         elif action == "approve_signal":
             signal_id = data.get("signal_id")
@@ -716,13 +980,13 @@ async def spa_fallback(full_path: str):
         from fastapi import HTTPException
         raise HTTPException(status_code=404)
     # Serve static assets directly if they exist
-    asset_path = get_resource_path(f"Elirox/{full_path}")
+    asset_path = get_resource_path(f"../../dist/{full_path}")
     if os.path.isfile(asset_path):
         return FileResponse(asset_path)
     # Otherwise fall back to index.html for React routing
-    return FileResponse(get_resource_path("Elirox/index.html"))
+    return FileResponse(get_resource_path("../../dist/index.html"))
 
-def run_server(host="0.0.0.0", port=8000):
+def run_server(host="0.0.0.0", port=8080):
     # Start the broadcast task within the event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
