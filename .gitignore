@@ -1,50 +1,26 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Environments
-venv/
-env/
-.env
-
-# Databases
-*.db
-*.sqlite3
-
-# Logs
-*.log
-
-# Mac OS X
-.DS_Store
-
-# Mobile IDEs
-.idea/
-.vscode/
-*.swp
-
-# Build artifacts
-dist/
-build/
-*.egg-info/
-*.spec
+# Executables
 *.exe
 
-# Local Data
+# Environment variables (sensitive)
+.env
+.env.trading
+.env.example
+
+# Python cache and virtual environments
+__pycache__/
+venv/
+.venv/
+build/
+dist/
+
+# Database files
 *.db
-*.bak
-*.log
 *.sqlite3
 
-# Secrets
-.env
-gcp-key.json
-*.TXT
-*.txt
-!README.md
-!AUTO_TRADE_GUIDE.md
-
-# Temporary / Scratch
-scratch/
-__pycache__/
+# OS specific files
 .DS_Store
+Thumbs.db
+
+# VS Code / IDE settings
+.vscode/
+.idea/

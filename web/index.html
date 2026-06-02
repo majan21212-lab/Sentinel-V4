@@ -21,6 +21,7 @@
                 <li class="nav-item active" onclick="switchTab('dashboard', this)">📊 Dashboard</li>
                 <li class="nav-item" onclick="switchTab('bots', this)">🤖 My Bots</li>
                 <li class="nav-item" onclick="switchTab('portfolio', this)">💼 Portfolio</li>
+                <li class="nav-item" onclick="switchTab('options', this)">🎭 Options Market</li>
                 <li class="nav-item" onclick="switchTab('settings', this)">⚙️ Settings</li>
             </ul>
         </nav>
@@ -224,6 +225,47 @@
                             <input type="number" value="1.0" class="custom-input">
                         </div>
                         <button class="btn-secondary" style="margin-top: 10px;" onclick="saveRiskParams()">Save Risk Parameters</button>
+                    </div>
+                </div>
+            </div>
+
+            </div>
+
+            <!-- ============================== -->
+            <!-- TAB: OPTIONS MARKET -->
+            <!-- ============================== -->
+            <div id="tab-options" class="tab-pane">
+                <div class="kpi-grid">
+                    <div class="kpi-card" style="--accent-primary: var(--accent-neon);">
+                        <span class="kpi-label">OPTIONS TRADING</span>
+                        <span class="kpi-value" id="options-status">ACTIVE</span>
+                        <span class="kpi-sub" style="color: var(--text-muted);">Alpaca V2 Protocol</span>
+                    </div>
+                </div>
+                
+                <div class="bottom-grid" style="grid-template-columns: 1fr;">
+                    <div class="table-card">
+                        <div class="card-title">AVAILABLE CONTRACTS (ATM)</div>
+                        <div style="display:flex; gap:10px; margin-bottom:15px;">
+                            <input type="text" id="option-search" placeholder="Enter Ticker (e.g. AAPL)" class="custom-input" style="margin-top:0; width:200px;">
+                            <button onclick="scanOptions()" class="btn-secondary" style="margin-top:0;">Scan Contracts</button>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>SYMBOL</th>
+                                    <th>EXPIRY</th>
+                                    <th>STRIKE</th>
+                                    <th>TYPE</th>
+                                    <th>ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="options-body">
+                                <tr>
+                                    <td colspan="5" style="text-align:center; padding:40px; color:var(--text-muted);">Enter a ticker to scan for option contracts</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

@@ -3,186 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel Advanced Mode UI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/index.css">
+    <title>QuantumTrade Visualizer | RSI + MA Crossover</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-    <div class="bg-fx"></div>
-    <div class="container">
-        
-        <header class="header">
-            <div class="logo">
-                <div class="pulse-ring"></div>
-                <div class="logo-text">Sentinel<span>OS</span></div>
-            </div>
-            <div class="status-badge" id="broker-status">
-                <span class="indicator red"></span> Disconnected
+    <div class="dashboard-container">
+        <header>
+            <div class="logo">QuantumTrade Visualizer</div>
+            <div class="controls">
+                <span class="status-badge status-live">DEMO MODE</span>
+                <button class="btn" id="refresh-btn">REFRESH DATA</button>
             </div>
         </header>
+        <div class="main-content">
+            <aside class="sidebar">
+                <section class="card">
+                    <h3>Strategy Overview</h3>
+                    <p style="font-size: 0.8rem; line-height: 1.4;">
+                        RSI & MA Confluence Strategy<br>
+                        Long: Cross SMA 9/21 + RSI < 70<br>
+                        Short: Cross SMA 9/21 + RSI > 30
+                    </p>
+                </section>
 
-        <section class="overview">
-            <div class="glass-card stat-card">
-                <div class="stat-title">Core Equity</div>
-                <div class="stat-value" id="equity-value">$--.--</div>
-                <div class="stat-meta" id="broker-name">Awaiting Sync</div>
-            </div>
-            
-            <div class="glass-card stat-card">
-                <div class="stat-title">Active Exposure</div>
-                <div class="stat-value" id="open-positions-count">0</div>
-                <div class="stat-meta">Open Correlated Groups</div>
-            </div>
-
-            <div class="glass-card controls-card">
-                <div class="stat-title">Environment Control</div>
-                <div class="control-group">
-                    <label>Profile</label>
-                    <select id="profile-select" onchange="updateSettings()">
-                        <option value="CONSERVATIVE">Conservative</option>
-                        <option value="OPTIMAL">Optimal</option>
-                        <option value="AGGRESSIVE">Aggressive</option>
-                    </select>
-                </div>
-                <div class="control-group">
-                    <label>Mode</label>
-                    <div class="toggle-container">
-                        <input type="checkbox" id="demo-toggle" onchange="updateSettings()" checked>
-                        <span class="toggle-label" id="mode-label">DEMO (PAPER)</span>
+                <section class="card">
+                    <h3>Live Metrics</h3>
+                    <div class="indicator-row">
+                        <span>SMA 9:</span> <span id="val-sma9" class="value">-</span>
                     </div>
-                </div>
-            </div>
-        </section>
+                    <div class="indicator-row">
+                        <span>SMA 21:</span> <span id="val-sma21" class="value">-</span>
+                    </div>
+                    <div class="indicator-row">
+                        <span>RSI (14):</span> <span id="val-rsi" class="value">-</span>
+                    </div>
+                </section>
 
-        <section class="signals-section">
-            <div class="glass-card table-glass">
-                <div class="table-header">
-                    <h2>Live ML Validation Feed</h2>
-                    <div class="live-tag"><span class="dot"></span> REALTIME</div>
-                </div>
-                <div class="table-container">
-                    <table class="signals-table">
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>Asset</th>
-                                <th>Direction</th>
-                                <th>Entry</th>
-                                <th>Validation Reason</th>
-                            </tr>
-                        </thead>
-                        <tbody id="signals-body">
-                            <tr>
-                                <td colspan="5" class="loading-td">Intercepting telemetry...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+                <section class="card">
+                    <h3>Signals Log</h3>
+                    <div id="signals-container">
+                        <!-- Signals will be populated here -->
+                    </div>
+                </section>
 
+                <section class="card">
+                    <h3>Risk Management</h3>
+                    <div style="font-size: 0.85rem;">
+                        TP: +2.0% ($204.00)<br>
+                        SL: -1.0% ($198.00)<br>
+                        Capital: $200.00
+                    </div>
+                </section>
+            </aside>
+
+            <main class="chart-section">
+                <div id="chart-container"></div>
+                <div id="rsi-container"></div>
+            </main>
+        </div>
     </div>
-
-    <script>
-        async function fetchStats() {
-            try {
-                const res = await fetch('/api/stats');
-                const data = await res.json();
-                
-                const statusBadge = document.getElementById('broker-status');
-                const equityVal = document.getElementById('equity-value');
-                const brokerName = document.getElementById('broker-name');
-                const positionsCount = document.getElementById('open-positions-count');
-                const symbolsList = document.getElementById('active-symbols-list');
-
-                if (data.status === 'connected') {
-                    statusBadge.innerHTML = `<span class="indicator green"></span> ${data.target_broker} LIVE`;
-                    equityVal.textContent = `$${data.equity.toFixed(2)}`;
-                    brokerName.textContent = `${data.target_broker} Network`;
-                } else {
-                    statusBadge.innerHTML = `<span class="indicator red"></span> ${data.target_broker} Disconnected`;
-                    equityVal.textContent = `$0.00`;
-                    brokerName.textContent = data.message || "Connection Failed";
-                }
-
-                if (data.active_symbols) {
-                    positionsCount.textContent = data.active_symbols.length;
-                    symbolsList.innerHTML = data.active_symbols.length > 0 
-                                            ? data.active_symbols.map(s => `<span class="symbol-pill">${s}</span>`).join('') 
-                                            : "None";
-                }
-
-            } catch (err) {
-                console.error("Stats poll failed", err);
-            }
-        }
-
-        async function fetchSignals() {
-            try {
-                const res = await fetch('/api/signals');
-                const data = await res.json();
-                
-                if (data.signals) {
-                    const tbody = document.getElementById('signals-body');
-                    tbody.innerHTML = '';
-                    
-                    if (data.signals.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; opacity:0.5;">No signals logged yet.</td></tr>`;
-                        return;
-                    }
-                    
-                    data.signals.forEach(sig => {
-                        const tr = document.createElement('tr');
-                        
-                        // Parse timestamp 
-                        let d = new Date(sig.created_at + 'Z');
-                        let tStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-                        
-                        const dirClass = sig.direction === 'LONG' ? 'dir-long' : 'dir-short';
-                        
-                        tr.innerHTML = `
-                            <td class="td-time">${tStr}</td>
-                            <td class="td-asset">${sig.symbol}</td>
-                            <td><span class="dir-badge ${dirClass}">${sig.direction}</span></td>
-                            <td class="td-entry">${sig.entry_price.toFixed(5)}</td>
-                            <td class="td-reason">${sig.indicators_meta || 'ML Validation OK'}</td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
-                }
-            } catch (err) {
-                console.error("Signals poll failed", err);
-            }
-        }
-
-        async function updateSettings() {
-            const profile = document.getElementById('profile-select').value;
-            const isDemo = document.getElementById('demo-toggle').checked;
-            document.getElementById('mode-label').textContent = isDemo ? "DEMO (PAPER)" : "LIVE (TRADING)";
-            
-            try {
-                await fetch('/api/settings', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        active_profile: profile,
-                        demo_mode: isDemo
-                    })
-                });
-            } catch (err) {
-                console.error("Failed to update settings", err);
-            }
-        }
-
-        // Poll every 5s
-        setInterval(fetchStats, 5000);
-        setInterval(fetchSignals, 5000);
-        
-        // Initial Fetch
-        fetchStats();
-        fetchSignals();
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>

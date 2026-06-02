@@ -22,9 +22,18 @@ struct DashboardView: View {
                         // 1. Header & Master Switch
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("JEWEL ELITE")
-                                    .font(.system(size: 20, weight: .black))
-                                    .tracking(1)
+                                HStack(spacing: 6) {
+                                    Text("JEWEL ELITE")
+                                        .font(.system(size: 20, weight: .black))
+                                        .tracking(1)
+                                    
+                                    if vm.isPropFirmMode {
+                                        Image(systemName: "shield.checkered")
+                                            .foregroundColor(.blue)
+                                            .font(.system(size: 14))
+                                            .help("Prop Firm Shield Active")
+                                    }
+                                }
                                 
                                 Text("BOT MANAGER")
                                     .font(.system(size: 10, weight: .bold))
@@ -41,9 +50,9 @@ struct DashboardView: View {
                             }) {
                                 HStack {
                                     Circle()
-                                        .fill(vm.autoTrade ? Color.green : Color.red)
+                                        .fill(vm.isEmergencyStop ? Color.orange : (vm.autoTrade ? Color.green : Color.red))
                                         .frame(width: 8, height: 8)
-                                    Text(vm.autoTrade ? "ENGINE ACTIVE" : "ENGINE STOPPED")
+                                    Text(vm.isEmergencyStop ? "EMERGENCY HALT" : (vm.autoTrade ? "ENGINE ACTIVE" : "ENGINE STOPPED"))
                                         .font(.system(size: 10, weight: .black))
                                 }
                                 .padding(.horizontal, 12)
@@ -58,6 +67,30 @@ struct DashboardView: View {
                         }
                         .padding(.horizontal)
                         .padding(.top, 10)
+
+                        // 1.5 NEWS ALERT BANNER
+                        if !vm.newsAlerts.isEmpty {
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Image(systemName: "calendar.badge.exclamationmark")
+                                    Text("HIGH IMPACT NEWS DETECTED")
+                                        .font(.system(size: 10, weight: .black))
+                                }
+                                .foregroundColor(.orange)
+                                
+                                ForEach(vm.newsAlerts, id: \.self) { news in
+                                    Text("• \(news["symbol"] ?? ""): \(news["title"] ?? "")")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(12)
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.3), lineWidth: 1))
+                            .padding(.horizontal)
+                        }
                         
                         // 2. KPI Grid (4 Cards)
                         LazyVGrid(columns: columns, spacing: 15) {

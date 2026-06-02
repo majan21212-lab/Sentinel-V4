@@ -3,8 +3,8 @@ import SwiftUI
 @main
 struct JewelEliteApp: App {
     var body: some Scene {
-        WindowGroup {
-            DashboardView()
+                    WindowGroup {
+            ContentView()
                 .preferredColorScheme(.dark)
         }
     }

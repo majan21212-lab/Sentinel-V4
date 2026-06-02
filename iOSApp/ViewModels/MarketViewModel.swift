@@ -7,6 +7,9 @@ class MarketViewModel: ObservableObject {
     @Published var isScanning: Bool = false
     @Published var autoTrade: Bool = false
     @Published var candleHistory: [MarketCandle] = []
+    @Published var newsAlerts: [[String: String]] = []
+    @Published var isEmergencyStop: Bool = false
+    @Published var isPropFirmMode: Bool = false
     
     private var cancellables = Set<AnyCancellable>()
     private let ws = BinanceWebSocketService.shared
@@ -142,6 +145,27 @@ class MarketViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newBalance in
                 self?.balance = String(format: "$%.2f", newBalance)
+            }
+            .store(in: &cancellables)
+
+        fastAPI.$newsAlerts
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] news in
+                self?.newsAlerts = news
+            }
+            .store(in: &cancellables)
+
+        fastAPI.$isEmergencyStop
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] stop in
+                self?.isEmergencyStop = stop
+            }
+            .store(in: &cancellables)
+
+        fastAPI.$isPropFirmMode
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] mode in
+                self?.isPropFirmMode = mode
             }
             .store(in: &cancellables)
     }

@@ -3,6 +3,9 @@ import os
 import json
 from execution_layer import ExecutionLayer
 from ml_validator import MLValidator
+from trailing_stop_manager import TrailingStopManager
+from partial_close_manager import PartialCloseManager
+from hedging_engine import HedgingEngine
 import threading
 
 log = logging.getLogger(__name__)
@@ -34,15 +37,12 @@ def load_shared_state():
         "is_bot_active": False,
         "kill_switch": False,
         "demo_balance": 200.00,
+        "balance": 0.00,
+        "active_broker": "DEMO",
+        "broker_status": "DISCONNECTED",
         "execution_bias": "TREND",
         "risk_config": {},
-        "analytics": {},
-        "user_profile": {
-            "name": "Commander",
-            "username": "admin",
-            "password": "password123",
-            "photo_url": ""
-        }
+        "analytics": {}
     }
     if os.path.exists(STATE_FILE):
         with STATE_LOCK:
@@ -71,6 +71,9 @@ SHARED_DATA = load_shared_state()
 
 _executor = None
 _ml_validator = None
+_hedger = None
+_trailer = None
+_partial_closer = None
 
 def get_executor() -> ExecutionLayer:
     global _executor
@@ -95,37 +98,31 @@ def get_ml_validator() -> MLValidator:
         _ml_validator = MLValidator()
     return _ml_validator
 
+def get_hedger() -> HedgingEngine:
+    global _hedger
+    if _hedger is None:
+        _hedger = HedgingEngine(get_executor().risk_engine.config)
+    return _hedger
+
+def get_trailer() -> TrailingStopManager:
+    global _trailer
+    if _trailer is None:
+        _trailer = TrailingStopManager(get_executor().risk_engine.config)
+    return _trailer
+
+def get_partial_closer() -> PartialCloseManager:
+    global _partial_closer
+    if _partial_closer is None:
+        _partial_closer = PartialCloseManager(get_executor().risk_engine.config)
+    return _partial_closer
+
+def reset_executor():
+    global _executor
+    _executor = None
+    return get_executor()
+
 def update_shared_data(key, value):
     global SHARED_DATA
     if key in SHARED_DATA:
         SHARED_DATA[key] = value
         save_shared_state(SHARED_DATA)
-
-# ── Deduplication helpers ──────────────────────────────────────────────────────
-
-# In-memory set of ticket IDs already moved to trade_history this session.
-# Prevents the same closed trade from being appended on every polling cycle.
-_LOGGED_CLOSED_TICKETS: set = set()
-
-def record_closed_trade(trade: dict):
-    """
-    Safely moves a completed trade into trade_history exactly ONCE.
-    Call this whenever a trade's status transitions to CLOSED/STOPPED/TP.
-
-    Parameters
-    ----------
-    trade : dict  — the trade dict (must contain a 'ticket' key).
-    """
-    global SHARED_DATA, _LOGGED_CLOSED_TICKETS
-    ticket = str(trade.get("ticket", ""))
-    if not ticket or ticket in _LOGGED_CLOSED_TICKETS:
-        return  # already logged — skip
-
-    _LOGGED_CLOSED_TICKETS.add(ticket)
-    history = SHARED_DATA.get("trade_history", [])
-    # Prepend and cap at 200 entries
-    history.insert(0, dict(trade))
-    SHARED_DATA["trade_history"] = history[:200]
-    save_shared_state(SHARED_DATA)
-    log.info(f"📋 Trade #{ticket} moved to history (total: {len(SHARED_DATA['trade_history'])})")
-

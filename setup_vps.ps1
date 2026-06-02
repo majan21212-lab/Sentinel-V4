@@ -1,7 +1,7 @@
 # Sentinel-V4 VPS Setup Script
 # Run this script with Administrator privileges on the VPS.
 
-Write-Host "--- Initializing Sentinel-V4 Setup on VPS (35.184.162.126) ---" -ForegroundColor Cyan
+Write-Host "--- Initializing Sentinel-V4 Setup on VPS (34.26.143.224) ---" -ForegroundColor Cyan
 
 # 1. Install Dependencies
 Write-Host "[1/3] Installing Python dependencies..." -ForegroundColor Yellow
@@ -22,4 +22,4 @@ Register-ScheduledTask -TaskName "SentinelBot" -Action $Action -Trigger $Trigger
 
 Write-Host "--- Setup Complete! ---" -ForegroundColor Green
 Write-Host "You can now start the bot manually with: python app.py"
-Write-Host "Access Dashboard at: http://35.184.162.126:8000"
+Write-Host "Access Dashboard at: http://34.26.143.224:8000"

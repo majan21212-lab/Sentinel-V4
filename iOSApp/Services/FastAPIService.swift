@@ -4,7 +4,7 @@ import Combine
 class FastAPIService: ObservableObject {
     static let shared = FastAPIService()
     
-    private let baseURL = "http://35.184.162.126:8000" // Default backend URL
+    private let baseURL = "http://34.26.143.224:8000" // Default backend URL
     private var webSocketTask: URLSessionWebSocketTask?
     private let token = KeychainManager.shared.load(for: "sentinel_api_token") ?? "sentinel_debug_key"
     
@@ -12,6 +12,9 @@ class FastAPIService: ObservableObject {
     @Published var connectionStatus: String = "Disconnected"
     @Published var balance: Double = 0.0
     @Published var activeBroker: String = "DEMO"
+    @Published var newsAlerts: [[String: String]] = []
+    @Published var isEmergencyStop: Bool = false
+    @Published var isPropFirmMode: Bool = false
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -118,7 +121,7 @@ class FastAPIService: ObservableObject {
     // MARK: - WebSocket (Live Streams)
     
     func connectWebSocket() {
-        let wsURL = URL(string: "ws://35.184.162.126:8000/ws")!
+        let wsURL = URL(string: "ws://34.26.143.224:8000/ws")!
         webSocketTask = URLSession.shared.webSocketTask(with: wsURL)
         webSocketTask?.resume()
         
@@ -163,6 +166,18 @@ class FastAPIService: ObservableObject {
                 
                 if let broker = json["active_broker"] as? String {
                     self.activeBroker = broker
+                }
+                
+                if let news = json["news_alerts"] as? [[String: String]] {
+                    self.newsAlerts = news
+                }
+                
+                if let stop = json["emergency_stop"] as? Bool {
+                    self.isEmergencyStop = stop
+                }
+                
+                if let prop = json["prop_firm_active"] as? Bool {
+                    self.isPropFirmMode = prop
                 }
             }
 

@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 # Load credentials
-load_dotenv(".env.trading") # Separated env file for trading keys
+load_dotenv(".env") # Main env file for trading keys
 
 API_KEY = os.getenv("ALPACA_API_KEY", "YOUR_PAPER_API_KEY")
 SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "YOUR_PAPER_SECRET_KEY")

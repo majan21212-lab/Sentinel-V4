@@ -1,0 +1,13 @@
+python-dotenv
+pandas
+pandas_ta
+ccxt
+schedule
+alpaca-trade-api
+pyinstaller
+MetaTrader5
+fastapi
+uvicorn
+pyngrok
+pytz
+scikit-learn

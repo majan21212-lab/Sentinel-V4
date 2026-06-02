@@ -1,14 +1,392 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>fleet-dashboard-overview</title>
-    <script type="module" crossorigin src="/assets/index-DFhjdCHE.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B6LyJF5L.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SENTINEL V4 | COCKPIT</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=3.0">
+</head>
+<body>
+    <header>
+        <div class="logo-section">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00d2ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <span class="logo-v4" style="font-family: 'Orbitron', sans-serif;">SENTINEL V4</span>
+        </div>
+        
+        <div class="top-actions">
+            <div class="icon-btn" onclick="window.app.openModal('analysis')" title="Market Analysis"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20V14"></path></svg></div>
+            <div class="icon-btn" onclick="window.app.openModal('alerts')" title="System Alerts"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
+            <div class="icon-btn" onclick="window.app.openModal('settings')" title="Configuration"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1-2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1-2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></div>
+            <div class="icon-btn" onclick="window.app.openModal('menu')" title="Main Menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></div>
+        </div>
+    </header>
+
+    <main class="cockpit-container">
+        <!-- LEFT PANEL: System Control -->
+        <section class="panel">
+            <div class="card">
+                <div class="card-header">SYSTEM CONTROL <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></div>
+                <div class="control-stack">
+                    <button class="btn-main btn-activate" id="btn-activate" onclick="window.app.toggleBot(true)">ACTIVATE BOT</button>
+                    <button class="btn-main btn-pause" id="btn-pause" onclick="window.app.toggleBot(false)">PAUSE SYSTEM</button>
+                </div>
+            </div>
+
+            <div id="broker-bridge-container" style="margin-top: 15px; display: flex; flex-direction: column; gap: 12px;">
+                <!-- ALPACA CARD -->
+                <div class="card broker-card" id="card-alpaca">
+                    <div class="card-header">ALPACA BRIDGE <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                    <div class="broker-info">
+                        <div class="info-row"><span>ACCOUNT</span><span class="badge" id="alpaca-type">DEMO</span></div>
+                        <div class="info-row"><span>BALANCE</span><span id="alpaca-balance" style="color: var(--neon-green);">$0.00</span></div>
+                        <div class="status-row"><span id="alpaca-pulse" class="pulse"></span><span id="alpaca-status" class="status-text" style="color: var(--text-muted);">Syncing...</span></div>
+                    </div>
+                </div>
+
+                <!-- MT5 CARD -->
+                <div class="card broker-card" id="card-mt5">
+                    <div class="card-header">MT5 BRIDGE <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                    <div class="broker-info">
+                        <div class="info-row"><span>ACCOUNT</span><span class="badge" id="mt5-type">DEMO</span></div>
+                        <div class="info-row"><span>BALANCE</span><span id="mt5-balance" style="color: var(--neon-green);">$0.00</span></div>
+                        <div class="status-row"><span id="mt5-pulse" class="pulse"></span><span id="mt5-status" class="status-text" style="color: var(--text-muted);">Syncing...</span></div>
+                    </div>
+                </div>
+
+                <!-- BINANCE CARD -->
+                <div class="card broker-card" id="card-binance">
+                    <div class="card-header">BINANCE BRIDGE <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                    <div class="broker-info">
+                        <div class="info-row"><span>ACCOUNT</span><span class="badge" id="binance-type">DEMO</span></div>
+                        <div class="info-row"><span>BALANCE</span><span id="binance-balance" style="color: var(--neon-green);">$0.00</span></div>
+                        <div class="status-row"><span id="binance-pulse" class="pulse"></span><span id="binance-status" class="status-text" style="color: var(--text-muted);">Syncing...</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panic-chamber">
+                <button class="panic-button" onclick="window.app.panicClose()">
+                    <span class="panic-text">PANIC</span>
+                    <span class="panic-text" style="font-size: 10px; margin-top: 5px;">LIQUIDATE</span>
+                </button>
+                <div style="font-size: 10px; color: var(--neon-red); font-weight: 800; letter-spacing: 1px;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="vertical-align: middle; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path></svg>
+                    EMERGENCY SHUTDOWN
+                </div>
+            </div>
+        </section>
+
+        <!-- CENTER PANEL: Positions & Trade Management -->
+        <section class="panel">
+            <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="card-header">
+                    <span>ACTIVE POSITIONS & TRADE MANAGEMENT</span>
+                    <div style="display: flex; gap: 6px;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--neon-red);"></span>
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--neon-orange);"></span>
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--neon-green);"></span>
+                    </div>
+                </div>
+                <div style="flex: 1; overflow-y: auto;">
+                    <table class="positions-table">
+                        <thead>
+                            <tr>
+                                <th>SYMBOL</th>
+                                <th>SIDE</th>
+                                <th>ENTRY</th>
+                                <th>SL/TP</th>
+                                <th>CURRENT P/L</th>
+                                <th>DURATION</th>
+                                <th>ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-body">
+                            <!-- Injected by app.js -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mini-chart" id="mini-chart-canvas">
+                    <!-- This would be a canvas or sparkline in a full impl -->
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">PERFORMANCE SNAPSHOT</div>
+                <div class="snapshot-bar">
+                    <div class="snap-item">
+                        <span class="snap-label">Daily P/L</span>
+                        <span class="snap-value" id="snap-daily-pnl" style="color: var(--neon-green);">+2.4%</span>
+                    </div>
+                    <div class="snap-item">
+                        <span class="snap-label">Total Bal <span id="snap-broker-status" style="font-size: 7px; vertical-align: middle; margin-left: 5px;"></span></span>
+                        <span class="snap-value" id="snap-total-bal">$10,500</span>
+                    </div>
+                    <div class="snap-item">
+                        <span class="snap-label">Win Rate</span>
+                        <span class="snap-value" id="snap-win-rate">68%</span>
+                    </div>
+                    <div class="snap-item">
+                        <span class="snap-label">Max Drawdown</span>
+                        <span class="snap-value" id="snap-max-drawdown" style="color: var(--neon-red);">1.5%</span>
+                    </div>
+                    <div class="snap-item">
+                        <span class="snap-label">Bot State</span>
+                        <span class="snap-value" id="snap-bot-state" style="color: var(--neon-green);">LIVE - ACTIVE</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT PANEL: Strategy & Telemetry -->
+        <section class="panel">
+            <div class="card">
+                <div class="card-header">STRATEGY SELECTOR & CONFIGURATION</div>
+                <div class="strategy-selector">
+                    <div class="strat-btn active" onclick="window.app.setStrategy('JEWEL_ELITE')">JEWEL ELITE<br><span style="font-size: 8px; opacity: 0.6;">(SMC/OF)</span></div>
+                    <div class="strat-btn" onclick="window.app.setStrategy('GOD_MODE')">GOD MODE<br><span style="font-size: 8px; opacity: 0.6;">(Scalp)</span></div>
+                    <div class="strat-btn" onclick="window.app.setStrategy('HYBRID')">HYBRID AI<br><span style="font-size: 8px; opacity: 0.6;">(Confluence)</span></div>
+                </div>
+                
+                <div class="config-slider">
+                    <div class="slider-label"><span>MAX DAILY DRAWDOWN</span><span id="drawdown-val">3%</span></div>
+                    <input type="range" id="slider-drawdown" min="1" max="10" value="3" oninput="document.getElementById('drawdown-val').innerText = this.value + '%'" onchange="window.app.updateRiskSettings()">
+                </div>
+                
+                <div class="config-slider">
+                    <div class="slider-label"><span>ASSET EXPOSURE</span><span id="exposure-val">2%</span></div>
+                    <input type="range" id="slider-exposure" min="1" max="10" value="2" oninput="document.getElementById('exposure-val').innerText = this.value + '%'" onchange="window.app.updateRiskSettings()">
+                </div>
+
+                <div class="card" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(0,210,255,0.1); margin-top: 15px; padding: 15px;">
+                    <div class="card-header" style="margin-bottom: 10px;">ML VALIDATION OVERRIDE</div>
+                    <div class="slider-label"><span>CONFIDENCE SCORE</span><span id="confidence-val">85%</span></div>
+                    <input type="range" id="slider-confidence" min="0" max="100" value="85" style="background: linear-gradient(to right, var(--neon-blue), var(--neon-green));" oninput="document.getElementById('confidence-val').innerText = this.value + '%'" onchange="window.app.updateRiskSettings()">
+                </div>
+            </div>
+
+            <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="card-header">
+                    <span>SYSTEM LOGS & TELEMETRY</span>
+                    <div style="display: flex; gap: 4px;">
+                        <span style="width: 4px; height: 10px; background: var(--neon-blue); border-radius: 2px;"></span>
+                        <span style="width: 4px; height: 10px; background: var(--neon-blue); border-radius: 2px; opacity: 0.5;"></span>
+                    </div>
+                </div>
+                <div class="log-feed" id="log-feed">
+                    <div class="log-entry"><span class="log-time">[10:05:31]</span> JEWEL ELITE Signal: <span style="color: var(--neon-green);">XAU Buy</span></div>
+                    <div class="log-entry"><span class="log-time">[10:05:32]</span> ML Verified <span class="log-msg-success">(88%)</span></div>
+                    <div class="log-entry"><span class="log-time">[10:05:32]</span> Trade Placed on MT5</div>
+                    <div class="log-entry"><span class="log-time">[10:05:32]</span> SL/TP Matrix Synchronized</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- OVERLAY MODALS -->
+    <div id="modal-backdrop" class="modal-backdrop" onclick="window.app.closeModals()"></div>
+
+    <!-- 1. Analysis Modal -->
+    <div id="modal-analysis" class="cockpit-modal">
+        <div class="modal-header">
+            <span>INSTITUTIONAL MARKET ANALYSIS</span>
+            <button class="close-modal" onclick="window.app.closeModals()">×</button>
+        </div>
+        <div class="modal-content" style="height: 400px;">
+            <div id="modal-chart-container" style="height: 100%; width: 100%;"></div>
+        </div>
+    </div>
+
+    <!-- 2. Alerts Modal -->
+    <div id="modal-alerts" class="cockpit-modal">
+        <div class="modal-header">
+            <span>TRADE HISTORY & SYSTEM ALERTS</span>
+            <button class="close-modal" onclick="window.app.closeModals()">×</button>
+        </div>
+        <div class="modal-content">
+            <table class="positions-table">
+                <thead>
+                    <tr>
+                        <th>DATE</th>
+                        <th>SYMBOL</th>
+                        <th>RESULT</th>
+                        <th>PROFIT</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body">
+                    <!-- Injected by app.js -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. Settings Modal -->
+    <div id="modal-settings" class="cockpit-modal">
+        <div class="modal-header">
+            <span>SYSTEM CONFIGURATION</span>
+            <button class="close-modal" onclick="window.app.closeModals()">×</button>
+        </div>
+        <div class="modal-content">
+            <div class="config-slider">
+                <div class="slider-label"><span>BROKER MODE</span></div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button class="strat-btn active" id="btn-demo" style="flex: 1;" onclick="window.app.openBrokerConnect('DEMO')">DEMO</button>
+                    <button class="strat-btn" id="btn-real" style="flex: 1;" onclick="window.app.openBrokerConnect('REAL')">REAL</button>
+                </div>
+            </div>
+            <!-- Market Intelligence & Asset Management -->
+            <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+                <div class="slider-label" style="color: var(--neon-blue); font-weight: 800;"><span>MARKET INTELLIGENCE HUB</span></div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <div style="flex: 2;">
+                        <input list="tv-symbols" id="add-asset-input" placeholder="Search TradingView Symbols (e.g. OANDA:EURUSD)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-neon); padding: 12px; color: white; border-radius: 6px; font-size: 12px;">
+                        <datalist id="tv-symbols">
+                            <option value="OANDA:EURUSD">Forex: Euro / US Dollar</option>
+                            <option value="OANDA:GBPUSD">Forex: British Pound / US Dollar</option>
+                            <option value="OANDA:USDJPY">Forex: US Dollar / Japanese Yen</option>
+                            <option value="OANDA:XAUUSD">Metals: Gold / US Dollar</option>
+                            <option value="OANDA:XAGUSD">Metals: Silver / US Dollar</option>
+                            <option value="BINANCE:BTCUSDT">Crypto: Bitcoin / Tether</option>
+                            <option value="BINANCE:ETHUSDT">Crypto: Ethereum / Tether</option>
+                            <option value="BINANCE:SOLUSDT">Crypto: Solana / Tether</option>
+                            <option value="OANDA:NAS100USD">Index: Nasdaq 100</option>
+                            <option value="OANDA:US30USD">Index: Dow Jones 30</option>
+                            <option value="TVC:USOIL">Commodity: WTI Crude Oil</option>
+                            <option value="TVC:UKOIL">Commodity: Brent Crude Oil</option>
+                        </datalist>
+                    </div>
+                    <div style="flex: 1;">
+                        <select id="add-asset-strategy" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-neon); padding: 12px; color: var(--neon-blue); border-radius: 6px; font-size: 11px; font-weight: 700; height: 100%; outline: none;">
+                            <option value="JEWEL_ELITE">JEWEL ELITE</option>
+                            <option value="GOD_MODE">GOD MODE</option>
+                            <option value="HYBRID">HYBRID AI</option>
+                        </select>
+                    </div>
+                    <button class="btn-main btn-activate" style="height: auto; padding: 0 25px; font-size: 11px; border-radius: 6px;" onclick="window.app.addAsset()">DEPLOY</button>
+                </div>
+
+                <!-- Active Markets Table -->
+                <div style="margin-top: 20px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); overflow: hidden;">
+                    <table class="positions-table" style="margin-bottom: 0;">
+                        <thead style="background: rgba(0,210,255,0.05);">
+                            <tr>
+                                <th style="padding: 8px 15px;">MONITORED ASSET</th>
+                                <th style="padding: 8px 15px;">STRATEGY MODE</th>
+                                <th style="padding: 8px 15px; text-align: right;">STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="market-config-body">
+                            <!-- Injected by app.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Menu Modal -->
+    <div id="modal-menu" class="cockpit-modal">
+        <div class="modal-header">
+            <span>MAIN MENU</span>
+            <button class="close-modal" onclick="window.app.closeModals()">×</button>
+        </div>
+        <div class="modal-content">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button class="strat-btn" style="text-align: left; padding-left: 20px;" onclick="window.app.openModal('profile')">ACCOUNT PROFILE</button>
+                <button class="strat-btn" style="text-align: left; padding-left: 20px;">SUBSCRIPTION: <span style="color: var(--neon-blue);">ELITE UNLIMITED</span></button>
+                <button class="strat-btn" style="text-align: left; padding-left: 20px; color: var(--neon-red);" onclick="window.app.panicClose()">EMERGENCY PANIC CLOSE</button>
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 10px 0;">
+                <button class="strat-btn" style="text-align: left; padding-left: 20px;" onclick="window.location.reload()">RELOAD DASHBOARD</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. Profile Modal -->
+    <div id="modal-profile" class="cockpit-modal">
+        <div class="modal-header">
+            <span>ELITE ACCOUNT PROFILE</span>
+            <button class="close-modal" onclick="window.app.closeModals()">×</button>
+        </div>
+        <div class="modal-content">
+            <div class="profile-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="card" style="padding: 15px; background: rgba(0,210,255,0.02); cursor: pointer;" onclick="window.app.openBrokerConnect('REAL')">
+                    <div style="font-size: 10px; color: var(--text-dim);">PRIMARY BROKER (CLICK TO EDIT)</div>
+                    <div id="prof-broker" style="font-size: 16px; font-weight: 800; color: white; margin-top: 5px;">EXNESS MT5</div>
+                </div>
+                <div class="card" style="padding: 15px; background: rgba(0,210,255,0.02); cursor: pointer;" onclick="window.app.openBrokerConnect('DEMO')">
+                    <div style="font-size: 10px; color: var(--text-dim);">ENVIRONMENT (CLICK TO EDIT)</div>
+                    <div id="prof-env" style="font-size: 16px; font-weight: 800; color: var(--neon-blue); margin-top: 5px;">DEMO</div>
+                </div>
+                <div class="card" style="padding: 15px; background: rgba(0,210,255,0.02);">
+                    <div style="font-size: 10px; color: var(--text-dim);">NET EQUITY</div>
+                    <div id="prof-equity" style="font-size: 16px; font-weight: 800; color: var(--neon-green); margin-top: 5px;">$10,500.00</div>
+                </div>
+                <div class="card" style="padding: 15px; background: rgba(0,210,255,0.02);">
+                    <div style="font-size: 10px; color: var(--text-dim);">FLOATING P/L</div>
+                    <div id="prof-floating" style="font-size: 16px; font-weight: 800; color: white; margin-top: 5px;">+$250.00</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,210,255,0.1); border-radius: 8px;">
+                <div style="font-size: 11px; font-weight: 800; color: var(--neon-blue); margin-bottom: 15px;">LIQUIDITY BRIDGE WEIGHTING</div>
+                <div id="prof-bridge-stats">
+                    <!-- Bridge bars injected by app.js -->
+                </div>
+            </div>
+            
+            <button class="btn-main btn-activate" style="margin-top: 20px; width: 100%; height: 45px; font-size: 12px;" onclick="window.app.closeModals()">RETURN TO COCKPIT</button>
+        </div>
+    </div>
+
+    <!-- 6. Broker Connection Modal (Registration) -->
+    <div id="modal-broker" class="cockpit-modal">
+        <div class="modal-header">
+            <span id="broker-modal-title">REGISTER BROKER ACCOUNT</span>
+            <button class="close-modal" onclick="window.app.closeModals()">×</button>
+        </div>
+        <div class="modal-content">
+            <div class="card" style="background: rgba(0,210,255,0.05); padding: 20px; border: 1px solid rgba(0,210,255,0.2);">
+                <div style="font-size: 11px; color: var(--neon-blue); font-weight: 800; margin-bottom: 20px; letter-spacing: 1px;">INSTITUTIONAL BRIDGE CONFIGURATION</div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 8px;">SELECT BRIDGE PLATFORM</label>
+                    <select id="broker-platform" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); padding: 12px; color: white; border-radius: 6px; outline: none;">
+                        <option value="MT5">MetaTrader 5 (Exness/IC Markets)</option>
+                        <option value="BINANCE">Binance Futures (API)</option>
+                        <option value="ALPACA">Alpaca Securities (Stocks)</option>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <label style="display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 8px;">ACCOUNT ID / API KEY</label>
+                        <input type="text" id="broker-account-id" placeholder="Enter ID" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); padding: 12px; color: white; border-radius: 6px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 8px;">SERVER / REGION</label>
+                        <input type="text" id="broker-server" placeholder="e.g. Exness-MT5Real" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); padding: 12px; color: white; border-radius: 6px;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 8px;">TRADING PASSWORD / SECRET KEY</label>
+                    <input type="password" id="broker-password" placeholder="••••••••••••" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); padding: 12px; color: white; border-radius: 6px;">
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; background: rgba(0,255,204,0.05); padding: 10px; border-radius: 4px; border: 1px solid rgba(0,255,204,0.1);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--neon-green)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <span style="font-size: 9px; color: var(--neon-green); font-weight: 600;">ENCRYPTED AES-256 SECURE CONNECTION</span>
+                </div>
+
+                <button class="btn-main btn-activate" style="width: 100%; height: 50px; font-weight: 800; letter-spacing: 2px;" onclick="window.app.submitBrokerRegistration()">INITIALIZE BRIDGE</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/app.js?v=4.1"></script>
+</body>
 </html>

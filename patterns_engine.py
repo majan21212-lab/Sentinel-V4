@@ -1,39 +1,20 @@
 import pandas as pd
 import numpy as np
+import pandas_ta as ta
 import logging
 
 log = logging.getLogger(__name__)
 
-# ── TA helper functions (replaces pandas_ta) ─────────────────────────────────
-def _ema(series, length):
-    return series.ewm(span=length, adjust=False).mean()
-
-def _sma(series, length):
-    return series.rolling(window=length).mean()
-
-def _rsi(series, length=14):
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0.0)
-    loss = -delta.where(delta < 0, 0.0)
-    avg_gain = gain.ewm(alpha=1/length, min_periods=length).mean()
-    avg_loss = loss.ewm(alpha=1/length, min_periods=length).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    return 100 - (100 / (1 + rs))
-
-def _atr(high, low, close, length=14):
-    tr1 = high - low
-    tr2 = (high - close.shift(1)).abs()
-    tr3 = (low - close.shift(1)).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    return tr.rolling(window=length).mean()
-
 class PatternsEngine:
-    def __init__(self, m5_df, m15_df=None, h1_df=None):
+    def __init__(self, m5_df, m15_df=None, h1_df=None, h4_df=None, config=None):
         self.df = m5_df
         self.m15 = m15_df
         self.h1 = h1_df
-        self.indicators = {} # Registry for custom indicator results
-        self._prepare_indicators()
+        self.h4 = h4_df
+        self.config = config
+        self.indicators = {} 
+        if self.df is not None and len(self.df) >= 10:
+            self._prepare_indicators()
 
     def add_custom_indicator(self, name: str, weight: float, condition_func):
         """
@@ -49,14 +30,24 @@ class PatternsEngine:
     def _prepare_indicators(self):
         """Prepare core indicators for the main timeframe."""
         df = self.df
+        if df is None or len(df) < 20: return
+        
         if 'ema200' not in df.columns:
-            df['ema200'] = _ema(df['close'], length=200)
+            ema = ta.ema(df['close'], length=min(200, len(df)-1))
+            df['ema200'] = ema if ema is not None else np.nan
         if 'rsi' not in df.columns:
-            df['rsi'] = _rsi(df['close'], length=14)
+            rsi = ta.rsi(df['close'], length=14)
+            df['rsi'] = rsi if rsi is not None else np.nan
         if 'vol_avg' not in df.columns:
-            df['vol_avg'] = _sma(df['volume'], length=20)
+            vol = ta.sma(df['volume'], length=20)
+            df['vol_avg'] = vol if vol is not None else np.nan
         if 'atr' not in df.columns:
-            df['atr'] = _atr(df['high'], df['low'], df['close'], length=14)
+            try:
+                df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+                if df['atr'] is None:
+                    df['atr'] = (df['high'] - df['low']).rolling(14).mean()
+            except Exception:
+                df['atr'] = (df['high'] - df['low']).rolling(14).mean()
         
         # Helper for pivot detection
         if 'ph' not in df.columns:
@@ -89,34 +80,63 @@ class PatternsEngine:
         Now includes dynamic custom indicators.
         """
         df = self.df
+        if df is None or len(df) < 5: return 0.0
         latest = df.iloc[-1]
         score = 0.0
 
         # 1. Trend Filter (EMA 200)
-        trend_ok = latest['close'] > latest['ema200'] if is_bull else latest['close'] < latest['ema200']
-        if trend_ok: score += 20
+        ema = latest.get('ema200')
+        if ema is not None and not pd.isna(ema):
+            trend_ok = latest['close'] > ema if is_bull else latest['close'] < ema
+            if trend_ok: score += 20
 
-        # 2. MTF Alignment (M15 & H1)
+        # 2. MTF Alignment (M15, H1, H4)
         mtf_score = 0
-        if self.m15 is not None:
-            m15_ema = _ema(self.m15['close'], length=200).iloc[-1]
-            if (is_bull and self.m15['close'].iloc[-1] > m15_ema) or (not is_bull and self.m15['close'].iloc[-1] < m15_ema):
-                mtf_score += 10
-        if self.h1 is not None and len(self.h1) > 200:
-            h1_series = _ema(self.h1['close'], length=200)
+        mtf_required = self.config.mtf_confluence_enabled if self.config else False
+        
+        # M15 Check
+        if self.m15 is not None and len(self.m15) >= 200:
+            m15_ema_series = ta.ema(self.m15['close'], length=200)
+            if m15_ema_series is not None and not m15_ema_series.empty:
+                m15_ema = m15_ema_series.iloc[-1]
+                if (is_bull and self.m15['close'].iloc[-1] > m15_ema) or (not is_bull and self.m15['close'].iloc[-1] < m15_ema):
+                    mtf_score += 10
+                elif mtf_required: return 0 
+        elif mtf_required: return 0
+
+        # H1 Check
+        if self.h1 is not None and len(self.h1) >= 200:
+            h1_series = ta.ema(self.h1['close'], length=200)
             if h1_series is not None and not h1_series.empty:
                  h1_ema = h1_series.iloc[-1]
                  if (is_bull and self.h1['close'].iloc[-1] > h1_ema) or (not is_bull and self.h1['close'].iloc[-1] < h1_ema):
                     mtf_score += 10
+                 elif mtf_required: return 0
+        elif mtf_required: return 0
+
+        # H4 Check (Macro Anchor)
+        if self.h4 is not None and len(self.h4) >= 200:
+            h4_series = ta.ema(self.h4['close'], length=200)
+            if h4_series is not None and not h4_series.empty:
+                h4_ema = h4_series.iloc[-1]
+                if (is_bull and self.h4['close'].iloc[-1] > h4_ema) or (not is_bull and self.h4['close'].iloc[-1] < h4_ema):
+                    mtf_score += 20 
+        elif mtf_required: return 0
+        
         score += mtf_score
 
         # 3. RSI Momentum
-        rsi_ok = (latest['rsi'] > 40 and latest['rsi'] < 75) if is_bull else (latest['rsi'] < 60 and latest['rsi'] > 25)
-        if rsi_ok: score += 15
+        rsi = latest.get('rsi')
+        if rsi is not None and not pd.isna(rsi):
+            rsi_ok = (rsi > 40 and rsi < 75) if is_bull else (rsi < 60 and rsi > 25)
+            if rsi_ok: score += 15
 
         # 4. Volume Filter
-        vol_ok = latest['volume'] > latest['vol_avg'] * 1.2
-        if vol_ok: score += 15
+        vol = latest.get('volume')
+        vol_avg = latest.get('vol_avg')
+        if vol is not None and vol_avg is not None and not pd.isna(vol) and not pd.isna(vol_avg):
+            vol_ok = vol > vol_avg * 1.2
+            if vol_ok: score += 15
 
         # 5. DYNAMIC CUSTOM INDICATORS
         for name, data in self.indicators.items():
@@ -283,35 +303,17 @@ class PatternsEngine:
         return None
     
     def detect_fvg(self, df):
-        """Detect Fair Value Gaps (FVG) / Imbalances and require a pullback Retest."""
-        if len(df) < 10: return []
-        signals = []
-        # Find the most recent FVG within the last 50 candles
-        start_idx = max(2, len(df)-50)
-        for i in range(start_idx, len(df)-2):
+        """Detect Fair Value Gaps (FVG) / Imbalances in a dataframe."""
+        if len(df) < 3: return []
+        gaps = []
+        for i in range(2, len(df)):
             # Bullish FVG (Low of candle 3 is above high of candle 1)
             if df['low'].iloc[i] > df['high'].iloc[i-2]:
-                gap_top = df['low'].iloc[i]
-                gap_bottom = df['high'].iloc[i-2]
-                
-                # Check if current price is pulling back INTO the gap
-                curr_low = df['low'].iloc[-1]
-                curr_close = df['close'].iloc[-1]
-                
-                if gap_bottom <= curr_low <= gap_top and curr_close > gap_bottom:
-                    signals.append({"type": "FVG_BULL_RETEST", "direction": "LONG", "score_bonus": 25})
-                    
+                gaps.append({"type": "FVG_BULL", "top": df['low'].iloc[i], "bottom": df['high'].iloc[i-2], "index": i})
             # Bearish FVG (High of candle 3 is below low of candle 1)
             elif df['high'].iloc[i] < df['low'].iloc[i-2]:
-                gap_bottom = df['low'].iloc[i-2]
-                gap_top = df['high'].iloc[i]
-                
-                curr_high = df['high'].iloc[-1]
-                curr_close = df['close'].iloc[-1]
-                
-                if gap_bottom <= curr_high <= gap_top and curr_close < gap_top:
-                    signals.append({"type": "FVG_BEAR_RETEST", "direction": "SHORT", "score_bonus": 25})
-        return signals
+                gaps.append({"type": "FVG_BEAR", "top": df['low'].iloc[i-2], "bottom": df['high'].iloc[i], "index": i})
+        return gaps
 
     def detect_order_blocks(self, df):
         """Detect Institutional Order Blocks (OB)."""
@@ -339,24 +341,16 @@ class PatternsEngine:
         """
         df = self.df
         h1_df = self.h1
-        atr = df['atr'].iloc[-1]
+        
+        if df is None or len(df) < 50:
+            return None
+            
+        atr = df['atr'].iloc[-1] if 'atr' in df.columns and not df['atr'].empty else (df['high'].iloc[-1] - df['low'].iloc[-1])
         entry = df['close'].iloc[-1]
         
-        # --- 1. Higher Timeframe Analysis (H1 Anchors & The River Rule) ---
+        # --- 1. Higher Timeframe Analysis (H1 Anchors) ---
         h1_bias = "NEUTRAL"
-        is_h1_bullish = True
-        is_h1_bearish = True
-        
-        if h1_df is not None and 'ema200' in h1_df.columns:
-            h1_ema = h1_df['ema200'].iloc[-1]
-            if entry < h1_ema:
-                is_h1_bullish = False
-            else:
-                is_h1_bearish = False
-                
-            # Default bias to the River direction
-            h1_bias = "LONG" if is_h1_bullish else "SHORT"
-            
+        if h1_df is not None:
             h1_obs = self.detect_order_blocks(h1_df)
             for ob in h1_obs:
                 if entry >= ob['low'] and entry <= ob['high']:
@@ -375,7 +369,9 @@ class PatternsEngine:
         ]
         
         # Dynamic NR7 weighting
-        nr7_boost = 10 if df['nr7'].iloc[-1] else 0
+        nr7_boost = 0
+        if 'nr7' in df.columns and not df['nr7'].empty:
+            nr7_boost = 10 if df['nr7'].iloc[-1] else 0
         
         # Flatten and filter results
         signals = []
@@ -390,12 +386,6 @@ class PatternsEngine:
         for sig in signals:
             sig_type = sig.get('type', '')
             is_bull = "BULL" in sig_type or sig.get('direction') == "LONG" or "DEMAND" in sig_type
-            
-            # --- THE RIVER RULE (Strict Macro Trend Rejection) ---
-            if is_bull and not is_h1_bullish:
-                continue # Instantly reject LONGs in a bearish river
-            if not is_bull and not is_h1_bearish:
-                continue # Instantly reject SHORTs in a bullish river
             
             # Confluence check: Must align with H1 or be a strong solo reversal
             if h1_bias == "LONG" and is_bull:
@@ -416,13 +406,10 @@ class PatternsEngine:
         total_score = min(100, base_score + 25 + nr7_boost) # SMC signals get a high bonus
         
         if total_score >= 60:
-            # OPTIMIZATION: Tightened safety net to 2.5 ATR for better R:R
-            sl_dist = atr * 2.5
+            sl_dist = atr * 2
             sl = entry - sl_dist if is_bull else entry + sl_dist
-            
-            # Risk-Reward: 1:2.0 for TP1, 1:5.0 for TP2 (Institutional Runner)
-            tp1 = entry + (sl_dist * 2.0) if is_bull else entry - (sl_dist * 2.0)
-            tp2 = entry + (sl_dist * 5.0) if is_bull else entry - (sl_dist * 5.0)
+            tp1 = entry + sl_dist if is_bull else entry - sl_dist
+            tp2 = entry + (sl_dist * 3) if is_bull else entry - (sl_dist * 3)
             
             return {
                 "pattern": primary.get('type', 'SMC_STRUCTURE'),

@@ -1,15 +1,41 @@
 {
-    "execution_mode": "LIVE",
     "active_profile": "CONSERVATIVE",
+    "execution_mode": "LIVE",
+    "max_daily_loss_pct": 1.0,
     "max_open_positions": 3,
-    "max_daily_loss_pct": 5.0,
-    "min_order_value_usd": 10.0,
     "risk_per_asset": {
         "XAUUSDm": 1.0,
         "BTCUSDm": 1.0,
         "DEFAULT": 0.5
     },
+    "min_order_value_usd": 10.0,
     "ai_scaling_symbols": ["XAUUSDm", "BTCUSDm"],
-    "min_multiplier": 0.1,
-    "max_multiplier": 2.0
+    "min_multiplier": 0.5,
+    "max_multiplier": 1.5,
+    "prop_firm_mode": true,
+    "max_daily_drawdown_pct": 4.5,
+    "max_total_drawdown_pct": 9.0,
+    "emergency_stop_active": false,
+    "mtf_confluence_enabled": true,
+    "check_h1_trend": true,
+    "check_h4_trend": true,
+    "bridge_mode_enabled": true,
+    "bridge_weighting": {
+        "mt5": 0.5,
+        "binance": 0.0,
+        "alpaca": 0.5
+    },
+    "hedging_enabled": true,
+    "hedge_threshold_pct": 2.5,
+    "trailing_stop_enabled": true,
+    "trailing_stop_atr_multiplier": 2.0,
+    "tp_ratios": {
+        "TP1": 0.50,
+        "TP2": 0.25,
+        "TP3": 0.25
+    },
+    "news_filter_enabled": true,
+    "news_buffer_mins": 30,
+    "news_impact_min": "High",
+    "fixed_capital_usd": 200.0
 }

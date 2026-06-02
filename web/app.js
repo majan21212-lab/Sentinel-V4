@@ -25,9 +25,50 @@ function switchTab(tabId, el) {
         'dashboard': 'Dashboard Overview',
         'bots': 'My Trading Bots',
         'portfolio': 'Portfolio & Open Positions',
+        'options': 'Alpaca Options Market',
         'settings': 'Platform Settings'
     };
     document.getElementById('page-title').innerText = titles[tabId];
+}
+
+async function scanOptions() {
+    const ticker = document.getElementById('option-search').value.toUpperCase();
+    if (!ticker) return showToast("Enter a ticker first.", true);
+    
+    showToast(`Scanning options for ${ticker}...`);
+    const tbody = document.getElementById('options-body');
+    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center; padding:40px; color:var(--text-muted);'>Fetching real-time data...</td></tr>";
+
+    try {
+        const res = await fetch(`/api/options/${ticker}`);
+        const contracts = await res.json();
+        
+        if (!contracts || contracts.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='5' style='text-align:center; padding:40px; color:var(--warning);'>No active contracts found for this ticker.</td></tr>";
+            return;
+        }
+
+        let html = "";
+        contracts.forEach(c => {
+            html += `
+                <tr>
+                    <td style="font-weight: 800">${c.symbol}</td>
+                    <td>${c.expiration_date}</td>
+                    <td>$${c.strike_price}</td>
+                    <td><span class="dir-tag ${c.type === 'call' ? 'dir-long' : 'dir-short'}">${c.type.toUpperCase()}</span></td>
+                    <td><button onclick="tradeOption('${c.symbol}')" class="btn-secondary" style="margin:0; padding:4px 10px; font-size:0.7rem; border-color:var(--accent-neon); color:var(--accent-neon);">Trade</button></td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    } catch(e) {
+        showToast("Failed to fetch options.", true);
+    }
+}
+
+async function tradeOption(contractSymbol) {
+    showToast(`Executing option trade for ${contractSymbol}...`);
+    // This would call a manual trade endpoint or similar
 }
 
 function initCharts() {

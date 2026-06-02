@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 from models import Signal, AccountStatus, RiskConfig
 from execution_layer import ExecutionLayer
 from db_utils import setup_database
-import state_manager as state
 
 load_dotenv()
 
@@ -49,11 +48,10 @@ async def root():
 @app.get("/status", dependencies=[Depends(verify_token)])
 async def get_status():
     """Returns the operational status of the bot and configured brokers."""
-    current_state = state.load_shared_state()
     return {
-        "strategy": current_state.get("strategy_mode") or os.getenv("STRATEGY_MODE"),
+        "strategy": os.getenv("STRATEGY_MODE"),
         "active_adapters": list(executor.adapters.keys()),
-        "auto_trade": current_state.get("is_bot_active", False) or current_state.get("auto_trade", False)
+        "auto_trade": os.getenv("AUTO_TRADE_ENABLED") == "true"
     }
 
 @app.get("/account", dependencies=[Depends(verify_token)])
@@ -113,19 +111,7 @@ async def manual_trade(signal: Signal, platform: Optional[str] = None):
     else:
         raise HTTPException(status_code=400, detail=result.get('message') if result else "Execution failed")
 
-@app.post("/webhook")
-async def tradingview_webhook(payload: dict, token: str, platform: Optional[str] = None):
-    """Receives dynamic alerts from TradingView Pine Scripts (like SATS). URL must include ?token=YOUR_API_KEY"""
-    if token != SENTINEL_TOKEN:
-        raise HTTPException(status_code=403, detail="Invalid Sentinel Token")
-        
-    result = executor.handle_webhook_action(payload, platform=platform)
-    if result and result.get('status') in ['success', 'executed', 'partial_success']:
-        return {"status": "executed", "details": result}
-    else:
-        raise HTTPException(status_code=400, detail=result.get('message') if result else "Webhook execution failed")
-
 if __name__ == "__main__":
     import uvicorn
     setup_database()
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

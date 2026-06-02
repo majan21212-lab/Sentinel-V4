@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sentinel | Premium Trading Terminal</title>
+    
+    <!-- iOS PWA META TAGS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sentinel V4">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2592/2592231.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo-box"></div>
+                <span class="logo-text">SENTINEL</span>
+            </div>
+
+            <nav class="nav-menu">
+                <div class="nav-item active" onclick="switchTab('dashboard')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    <span>Dashboard</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('analytics')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20V14"></path></svg>
+                    <span>Analytics</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('signals')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                    <span>Signals</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('portfolio')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span>Portfolio</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('settings')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1-2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1-2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    <span>Settings</span>
+                </div>
+                <div class="nav-item ai-item" onclick="switchTab('ai')">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.69 6.5"></path><path d="M12 12l9.31-5.5"></path><path d="M12 12v10"></path></svg>
+                    <span>AI Agent</span>
+                </div>
+            </nav>
+
+            <button class="panic-btn" onclick="panicClose()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                PANIC CLOSE
+            </button>
+
+            <div class="market-sessions">
+                <div class="session-header">MARKET SESSIONS</div>
+                <div class="session-item">
+                    <span class="dot active"></span>
+                    <span>London</span>
+                    <span class="time">08:00 - 16:00</span>
+                </div>
+                <div class="session-item">
+                    <span class="dot active"></span>
+                    <span>New York</span>
+                    <span class="time">13:00 - 21:00</span>
+                </div>
+                <div class="session-item">
+                    <span class="dot"></span>
+                    <span>Tokyo</span>
+                    <span class="time">00:00 - 08:00</span>
+                </div>
+            </div>
+
+            <div class="system-status">
+                <div class="status-label">SYSTEM STATUS</div>
+                <div class="status-val"><span class="dot active"></span> SYSTEM SECURE</div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- TOP BAR -->
+            <header class="top-bar">
+                <button class="menu-toggle" id="menu-toggle" style="display: none;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+                <div class="user-info">
+                    <div class="tier-badge">OBSIDIAN GOLD</div>
+                    <div class="user-meta">
+                        <span class="username">Said Alalawi</span>
+                        <span class="user-tier">Elite Tier Member</span>
+                    </div>
+                    <div class="user-avatar"></div>
+                </div>
+            </header>
+
+            <div class="dashboard-scroll">
+                <!-- PAGE HEADER -->
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Market Overview</h1>
+                        <p class="page-subtitle">Welcome back, Commander. Monitoring active market regimes. <span class="version">V4.02 STABLE</span></p>
+                    </div>
+                </div>
+
+                <!-- SIGNALS SECTION (Tab) -->
+                <div id="signals-tab" style="display: none;">
+                    <div class="section-title">Institutional Signal Intelligence</div>
+                    <div class="log-card">
+                        <div class="log-header">
+                            <span>ALPHA GENERATION FEED</span>
+                        </div>
+                        <div style="padding: 20px;">
+                            <table style="width: 100%; color: var(--text-main); border-collapse: collapse;">
+                                <thead>
+                                    <tr style="text-align: left; border-bottom: 1px solid var(--border-dim); color: var(--accent-gold); font-size: 12px;">
+                                        <th style="padding: 10px;">TIME</th>
+                                        <th>SYMBOL</th>
+                                        <th>TYPE</th>
+                                        <th>ENTRY</th>
+                                        <th>SL</th>
+                                        <th>TP</th>
+                                        <th>PATTERN</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="signals-feed-body">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MARKET SETTINGS SECTION (Tab) -->
+                <div id="settings-tab" style="display: none;">
+                    <div class="section-title">Institutional Market Configurator</div>
+                    <div class="log-card">
+                        <div class="log-header">
+                            <span>ACTIVE TRADING REGISTRY</span>
+                        </div>
+                        <div style="padding: 20px;">
+                            <table style="width: 100%; color: var(--text-main); border-collapse: collapse;">
+                                <thead>
+                                    <tr style="text-align: left; border-bottom: 1px solid var(--border-dim); color: var(--accent-gold); font-size: 12px;">
+                                        <th style="padding: 10px;">SYMBOL</th>
+                                        <th>STRATEGY</th>
+                                        <th>STATUS</th>
+                                        <th>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="market-config-body">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                                <input type="text" id="new-symbol" placeholder="e.g. XAUUSDm" style="background: var(--bg-card); border: 1px solid var(--border-dim); color: white; padding: 10px; border-radius: 4px; flex: 1;">
+                                <button class="btn-initialize" onclick="addNewMarket()" style="width: auto; padding: 0 20px;">Add Symbol</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="dashboard-main">
+                    <!-- KPI GRID -->
+                    <div class="kpi-grid">
+                    <div class="kpi-card gold-border">
+                        <div class="kpi-header">
+                            <span class="kpi-label">TOTAL EQUITY</span>
+                            <span class="kpi-badge">DEMO ACCOUNT</span>
+                        </div>
+                        <div class="kpi-value" id="total-equity">$8,471.87</div>
+                        <div class="kpi-actions">
+                            <button class="btn-sm"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add</button>
+                            <button class="btn-sm secondary"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"></line></svg> Withdraw</button>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Active Bots</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-gold)" stroke-width="2"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        </div>
+                        <div class="kpi-value" id="active-bots-count">7</div>
+                        <div class="kpi-sub">STOCKS FUNDS FUTURES FOREX CRYPTO INDICES BONDS ECONOMY</div>
+                        <div class="bot-selector">
+                            <select id="bot-mode">
+                                <option>SATS Pro (Self-Aware)</option>
+                                <option>Jewel Sniper</option>
+                                <option>God Mode v8</option>
+                                <option>Grid Strategy</option>
+                            </select>
+                            <button class="btn-initialize">Initialize Bot</button>
+                            <div class="bot-standby"><span class="pulse"></span> --- Standby</div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Daily Profit</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-gold)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        </div>
+                        <div class="kpi-value text-red" id="daily-profit">$-1528.13</div>
+                        <div class="kpi-trend text-red">↘ --</div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-header">
+                            <span class="kpi-label">Win Rate</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-gold)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M22 4L12 14.01l-3-3"></path></svg>
+                        </div>
+                        <div class="kpi-value" id="win-rate">5.5%</div>
+                        <div class="kpi-trend text-red">↘ -- vs average</div>
+                    </div>
+                </div>
+
+                <!-- BOT MANAGEMENT SECTION -->
+                <div class="section-title">Active Bot Management</div>
+                <div class="bot-grid" id="bot-grid">
+                    <div style="grid-column: 1/-1; text-align:center; padding: 40px; color: #555;">
+                        <span class="pulse active"></span> Scanning for active deployments...
+                    </div>
+                </div>
+
+                <!-- SATS INTELLIGENCE SECTION -->
+                <div class="sats-section">
+                    <div class="sats-header">
+                        <div>
+                            <div class="sats-title">SATS INTELLIGENCE ENGINE</div>
+                            <div class="sats-subtitle">Self-Aware Trend System • Multi-Factor Analysis</div>
+                        </div>
+                        <div class="live-analysis"><span class="dot active"></span> LIVE ANALYSIS</div>
+                    </div>
+                    
+                    <div class="sats-grid">
+                        <div class="sats-card">
+                            <div class="sats-card-title">TREND QUALITY INDEX (TQI)</div>
+                            <!-- Placeholder for TQI visualization -->
+                            <div style="height: 100px; display: flex; align-items: flex-end; gap: 4px; padding-top: 20px;">
+                                <div style="flex: 1; height: 30%; background: var(--bg-card);"></div>
+                                <div style="flex: 1; height: 45%; background: var(--bg-card);"></div>
+                                <div style="flex: 1; height: 60%; background: var(--bg-card);"></div>
+                                <div style="flex: 1; height: 85%; background: var(--accent-gold);"></div>
+                                <div style="flex: 1; height: 70%; background: var(--bg-card);"></div>
+                            </div>
+                        </div>
+                        <div class="sats-card">
+                            <div class="sats-card-title">MARKET REGIME MATRIX</div>
+                            <div class="matrix-grid">
+                                <div class="matrix-item">LOW VOL</div>
+                                <div class="matrix-item">HIGH VOL</div>
+                                <div class="matrix-item active">TRENDING</div>
+                                <div class="matrix-item">RANGING</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- NEW: BROKER BRIDGE INDIVIDUAL CARDS (Integrated) -->
+                <div class="section-title">Institutional Broker Bridge</div>
+                <div class="bot-grid" id="broker-cards">
+                    <!-- Cards will be injected here via JS -->
+                </div>
+                <!-- SYSTEM LOGS & TELEMETRY -->
+                <div class="section-title">System Logs & Telemetry</div>
+                <div class="log-card">
+                    <div class="log-header">
+                        <span>LIVE TERMINAL FEED</span>
+                        <div class="log-controls">
+                            <span class="pulse"></span>
+                            <span>SYNCED</span>
+                        </div>
+                    </div>
+                    <div class="log-body" id="log-body">
+                        <!-- Logs will be injected here -->
+                    </div>
+                </div>
+                </div> <!-- End dashboard-main -->
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

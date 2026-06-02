@@ -40,53 +40,13 @@ def setup_database():
                 take_profit REAL,
                 stop_loss REAL,
                 timeframe TEXT,
-                pattern TEXT,
-                score REAL,
-                outcome INTEGER DEFAULT 0, -- 1=Win, -1=Loss, 0=Pending
-                ml_confidence REAL,
                 indicators_meta TEXT,
-                ai_rationale TEXT, -- JSON block for AI Explainability
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """
-            # Create Equity History Table (For Charting)
-            create_history_query = """
-            CREATE TABLE IF NOT EXISTS equity_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                total_equity REAL NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-            # Create Transactions Table (For Audit Trail)
-            create_transactions_query = """
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                type TEXT NOT NULL, -- 'deposit', 'withdraw', 'reset'
-                amount REAL,
-                balance_before REAL,
-                balance_after REAL,
-                status TEXT DEFAULT 'success',
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
             cursor.execute(create_table_query)
-            cursor.execute(create_history_query)
-            cursor.execute(create_transactions_query)
-            
-            # --- Migrations (Ensure columns exist in older databases) ---
-            cursor.execute("PRAGMA table_info(signals)")
-            columns = [info[1] for info in cursor.fetchall()]
-            
-            if 'ai_rationale' not in columns:
-                print("Migration: Adding missing column 'ai_rationale' to signals table...")
-                cursor.execute("ALTER TABLE signals ADD COLUMN ai_rationale TEXT")
-            
-            if 'indicators_meta' not in columns:
-                print("Migration: Adding missing column 'indicators_meta' to signals table...")
-                cursor.execute("ALTER TABLE signals ADD COLUMN indicators_meta TEXT")
-
             conn.commit()
-            print("Database tables check/creation successful using SQLite.")
+            print("Table 'signals' check/creation successful using SQLite.")
             
             cursor.close()
             conn.close()
@@ -96,23 +56,6 @@ def setup_database():
 
     except sqlite3.Error as e:
         print(f"Error during SQLite database setup: {e}")
-
-def log_transaction(tx_type, amount, balance_before, balance_after, status='success'):
-    """Logs a funding transaction to the database."""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO transactions (type, amount, balance_before, balance_after, status)
-                VALUES (?, ?, ?, ?, ?)
-            """, (tx_type, amount, balance_before, balance_after, status))
-            conn.commit()
-            conn.close()
-            return True
-    except Exception as e:
-        print(f"Error logging transaction: {e}")
-    return False
 
 if __name__ == "__main__":
     setup_database()
