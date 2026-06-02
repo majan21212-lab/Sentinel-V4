@@ -1,6 +1,6 @@
 python-dotenv
 pandas
-pandas_ta
+pandas-ta
 ccxt
 schedule
 alpaca-trade-api
